@@ -31,20 +31,10 @@ const STATUS_COLS: { key: AppStatus; label: string; colour: string }[] = [
   { key: "offer",     label: "🎉 Offer",      colour: "bg-emerald-50 border-emerald-200" },
 ];
 
-// Mock data so the dashboard looks great even before Lambda is wired up
-const MOCK_APPS: Application[] = [
-  { applicationId: "1", status: "tailoring", companyName: "Stripe", jobTitle: "Senior Software Engineer", matchScore: 94, careerAlignmentScore: 91 },
-  { applicationId: "2", status: "review",    companyName: "Notion",  jobTitle: "Platform Engineer",        matchScore: 87, careerAlignmentScore: 85 },
-  { applicationId: "3", status: "submitted", companyName: "Linear",  jobTitle: "Staff Engineer",           matchScore: 82, careerAlignmentScore: 89 },
-  { applicationId: "4", status: "interview", companyName: "Figma",   jobTitle: "Full-Stack Engineer",      matchScore: 91, careerAlignmentScore: 88 },
-  { applicationId: "5", status: "matching",  companyName: "Vercel",  jobTitle: "Developer Experience",     matchScore: 79, careerAlignmentScore: 82 },
-];
-
 export default function DashboardPage() {
   const router = useRouter();
-  const [apps, setApps] = useState<Application[]>(MOCK_APPS);
+  const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDemo, setIsDemo] = useState(false);
   const [apiError, setApiError] = useState("");
 
   useEffect(() => {
@@ -55,12 +45,9 @@ export default function DashboardPage() {
       .then((data) => {
         if (data.applications?.length > 0) {
           setApps(data.applications);
-        } else {
-          setIsDemo(true); // API worked but no real apps yet
         }
       })
       .catch((err: unknown) => {
-        setIsDemo(true);
         setApiError(err instanceof Error ? err.message : "API unavailable");
       })
       .finally(() => setLoading(false));
@@ -96,12 +83,10 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
-        {/* Demo / API error banner */}
-        {isDemo && (
-          <div className={`text-sm px-4 py-2.5 rounded-lg border ${apiError ? "bg-red-50 border-red-200 text-red-700" : "bg-yellow-50 border-yellow-200 text-yellow-800"}`}>
-            {apiError
-              ? <>⚠️ API error: <code className="font-mono text-xs">{apiError}</code> — showing demo data</>
-              : "👋 No applications yet — showing demo data. Upload your CV to get started."}
+        {/* API error banner */}
+        {apiError && (
+          <div className="text-sm px-4 py-2.5 rounded-lg border bg-red-50 border-red-200 text-red-700">
+            ⚠️ Could not load applications: <code className="font-mono text-xs">{apiError}</code>
           </div>
         )}
 
@@ -128,6 +113,13 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold mb-4">Application Pipeline</h2>
           {loading ? (
             <p className="text-muted-foreground text-sm">Loading applications…</p>
+          ) : apps.length === 0 && !apiError ? (
+            <div className="text-center py-16 text-muted-foreground border rounded-lg bg-muted/20">
+              <p className="text-4xl mb-3">🚀</p>
+              <p className="font-medium mb-1">Your pipeline is empty</p>
+              <p className="text-sm">Jobs will appear here once the AI has found and scored matches for you.</p>
+              <p className="text-sm mt-1">This usually takes a few minutes after you save your career goals.</p>
+            </div>
           ) : (
             <div className="flex gap-3 overflow-x-auto pb-4">
               {STATUS_COLS.map((col) => {
@@ -163,25 +155,6 @@ export default function DashboardPage() {
               })}
             </div>
           )}
-        </div>
-
-        {/* Activity feed */}
-        <div>
-          <h2 className="text-lg font-semibold mb-3">Recent Activity</h2>
-          <div className="space-y-2">
-            {[
-              { icon: "✏️", text: "Tailored CV for Stripe — Senior Software Engineer", time: "2 min ago" },
-              { icon: "🔍", text: "Found 8 new job matches based on your career goals", time: "1 hour ago" },
-              { icon: "📤", text: "Applied to Linear — Staff Engineer", time: "3 hours ago" },
-              { icon: "🗓", text: "Interview scheduled with Figma — Full-Stack Engineer", time: "Yesterday" },
-            ].map((item, i) => (
-              <div key={i} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-muted/40">
-                <span>{item.icon}</span>
-                <span className="flex-1">{item.text}</span>
-                <span className="text-muted-foreground text-xs whitespace-nowrap">{item.time}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </main>
     </div>

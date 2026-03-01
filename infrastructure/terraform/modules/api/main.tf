@@ -31,6 +31,10 @@ variable "cognito_user_pool_arn" {
   type = string
 }
 
+variable "sqs_job_scout_queue_url" {
+  type = string
+}
+
 # --- Store API key in SSM Parameter Store (free, unlike Secrets Manager $0.40/mo) ---
 resource "aws_ssm_parameter" "anthropic_key" {
   name  = "/${var.prefix}/anthropic-api-key"
@@ -149,9 +153,10 @@ resource "aws_lambda_function" "api_handler" {
 
   environment {
     variables = {
-      ENVIRONMENT         = var.environment
+      ENVIRONMENT          = var.environment
       ANTHROPIC_PARAM_NAME = aws_ssm_parameter.anthropic_key.name
-      CV_BUCKET           = var.cv_bucket_name
+      CV_BUCKET            = var.cv_bucket_name
+      SQS_JOB_SCOUT_URL    = var.sqs_job_scout_queue_url
     }
   }
 }

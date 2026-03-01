@@ -10,9 +10,11 @@ from decimal import Decimal
 
 dynamodb = boto3.resource("dynamodb")
 s3 = boto3.client("s3")
+sqs = boto3.client("sqs")
 
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 CV_BUCKET = os.environ.get("CV_BUCKET", "aiapply-dev-cv-storage")
+SQS_JOB_SCOUT_URL = os.environ.get("SQS_JOB_SCOUT_URL", "")
 
 # Table references
 USERS_TABLE = f"aiapply-{ENVIRONMENT}-users"
@@ -116,8 +118,18 @@ def handle_get_upload_url(event: dict) -> dict:
     })
 
 
+def get_job_scout_queue_url() -> str:
+    """Get job scout SQS queue URL from env var, or derive it via STS (no extra perms needed)."""
+    if SQS_JOB_SCOUT_URL:
+        return SQS_JOB_SCOUT_URL
+    # Fallback: derive from account ID — works without GetQueueUrl permission
+    account_id = boto3.client("sts").get_caller_identity()["Account"]
+    region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    return f"https://sqs.{region}.amazonaws.com/{account_id}/aiapply-{ENVIRONMENT}-job-scout"
+
+
 def handle_save_career_goals(event: dict) -> dict:
-    """POST /api/career-goals — Save user's career goals."""
+    """POST /api/career-goals — Save user's career goals and trigger job scout."""
     user_id = get_user_id(event)
     body = json.loads(event.get("body", "{}"))
 
@@ -136,6 +148,25 @@ def handle_save_career_goals(event: dict) -> dict:
             },
         }
     )
+
+    # Trigger job scout for the user's primary CV
+    cvs_table = dynamodb.Table(CVS_TABLE)
+    result = cvs_table.query(
+        KeyConditionExpression="userId = :uid",
+        ExpressionAttributeValues={":uid": user_id},
+        Limit=1,
+    )
+    items = result.get("Items", [])
+    if items:
+        cv_id = items[0]["cvId"]
+        queue_url = get_job_scout_queue_url()
+        sqs.send_message(
+            QueueUrl=queue_url,
+            MessageBody=json.dumps({"userId": user_id, "cvId": cv_id}),
+        )
+        print(f"Triggered job scout for user {user_id}, cv {cv_id}")
+    else:
+        print(f"No CV found for user {user_id} — job scout not triggered")
 
     return response(200, {"message": "Career goals saved"})
 
