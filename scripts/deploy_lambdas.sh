@@ -36,6 +36,22 @@ pip_install_pure() {
     "$@"
 }
 
+strip_pkg() {
+  # Strip files not needed at runtime — keeps numpy+pandas under Lambda's 250 MB limit
+  local target="$1"
+  find "$target" -type d -name "__pycache__"  -exec rm -rf {} + 2>/dev/null || true
+  find "$target" -name "*.pyc" -delete 2>/dev/null || true
+  find "$target" -name "*.pyo" -delete 2>/dev/null || true
+  find "$target" -name "*.pyi" -delete 2>/dev/null || true
+  find "$target" -type d -name "tests"    -exec rm -rf {} + 2>/dev/null || true
+  find "$target" -type d -name "test"     -exec rm -rf {} + 2>/dev/null || true
+  find "$target" -type d -name "testing"  -exec rm -rf {} + 2>/dev/null || true
+  find "$target" -type d -name "f2py"     -exec rm -rf {} + 2>/dev/null || true
+  find "$target" -type d -name "distutils" -exec rm -rf {} + 2>/dev/null || true
+  find "$target" -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
+  find "$target" -type d -name "*.egg-info"  -exec rm -rf {} + 2>/dev/null || true
+}
+
 deploy() {
   local func_dir="$1"       # e.g. api
   local lambda_name="$2"    # e.g. aiapply-dev-api-handler
@@ -88,6 +104,9 @@ echo "  Installing: anthropic==0.84.0 (binary wheel)"
 pip_install "$JOB_SCOUT_PKG" "anthropic==0.84.0"
 echo "  Installing: python-jobspy (pure Python, installs as jobspy module)"
 pip_install "$JOB_SCOUT_PKG" "python-jobspy"
+echo "  Stripping tests/stubs to stay under Lambda 250 MB unzipped limit..."
+strip_pkg "$JOB_SCOUT_PKG"
+echo "  Stripped size: $(du -sh "$JOB_SCOUT_PKG" | cut -f1)"
 JOB_SCOUT_ZIP="$BUILD_DIR/job_scout.zip"
 (cd "$JOB_SCOUT_PKG" && zip -r "$JOB_SCOUT_ZIP" . -q)
 echo "  Package size: $(du -k "$JOB_SCOUT_ZIP" | cut -f1) KB"
