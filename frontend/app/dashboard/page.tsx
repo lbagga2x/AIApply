@@ -44,6 +44,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [apps, setApps] = useState<Application[]>(MOCK_APPS);
   const [loading, setLoading] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   useEffect(() => {
     isAuthenticated().then((ok) => {
@@ -51,9 +53,16 @@ export default function DashboardPage() {
     });
     getApplications()
       .then((data) => {
-        if (data.applications?.length > 0) setApps(data.applications);
+        if (data.applications?.length > 0) {
+          setApps(data.applications);
+        } else {
+          setIsDemo(true); // API worked but no real apps yet
+        }
       })
-      .catch(() => {}) // keep mock data on error
+      .catch((err: unknown) => {
+        setIsDemo(true);
+        setApiError(err instanceof Error ? err.message : "API unavailable");
+      })
       .finally(() => setLoading(false));
   }, [router]);
 
@@ -87,6 +96,15 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
+        {/* Demo / API error banner */}
+        {isDemo && (
+          <div className={`text-sm px-4 py-2.5 rounded-lg border ${apiError ? "bg-red-50 border-red-200 text-red-700" : "bg-yellow-50 border-yellow-200 text-yellow-800"}`}>
+            {apiError
+              ? <>⚠️ API error: <code className="font-mono text-xs">{apiError}</code> — showing demo data</>
+              : "👋 No applications yet — showing demo data. Upload your CV to get started."}
+          </div>
+        )}
+
         {/* Stats bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <StatCard label="Total Applications" value={stats.total} />

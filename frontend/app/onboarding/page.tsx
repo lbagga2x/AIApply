@@ -36,6 +36,7 @@ export default function OnboardingPage() {
   const [arrangement, setArrangement] = useState<string[]>(["Remote"]);
   const [dealbreakers, setDealbreakers] = useState("");
   const [savingGoals, setSavingGoals] = useState(false);
+  const [goalsError, setGoalsError] = useState("");
 
   // ── Drag & Drop ──────────────────────────────────────────────────────────
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -68,6 +69,7 @@ export default function OnboardingPage() {
   async function handleSaveGoals(e: React.FormEvent) {
     e.preventDefault();
     setSavingGoals(true);
+    setGoalsError("");
     try {
       await saveCareerGoals({
         targetRoles: targetRoles.split(",").map((r) => r.trim()).filter(Boolean),
@@ -80,7 +82,8 @@ export default function OnboardingPage() {
       });
       setStep("done");
       setTimeout(() => router.push("/dashboard"), 1500);
-    } catch {
+    } catch (err: unknown) {
+      setGoalsError(err instanceof Error ? err.message : "Failed to save — please try again");
       setSavingGoals(false);
     }
   }
@@ -260,6 +263,9 @@ export default function OnboardingPage() {
                   <p className="text-xs text-muted-foreground">We&apos;ll skip any jobs matching these</p>
                 </div>
 
+                {goalsError && (
+                  <p className="text-sm text-destructive">{goalsError}</p>
+                )}
                 <Button type="submit" className="w-full" disabled={savingGoals}>
                   {savingGoals ? "Saving…" : "Save Goals & Find Jobs →"}
                 </Button>
