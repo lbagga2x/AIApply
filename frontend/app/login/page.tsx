@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signIn } from "@/lib/auth";
+import { signIn, signOut, isAuthenticated } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,13 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // If already signed in, skip the login page entirely
+  useEffect(() => {
+    isAuthenticated().then((ok) => {
+      if (ok) router.push("/dashboard");
+    });
+  }, [router]);
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -25,7 +32,26 @@ export default function LoginPage() {
         router.push("/dashboard");
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const message = err instanceof Error ? err.message : "Login failed";
+      // Amplify throws this when a stale local session exists but the token
+      // has expired. Fix: sign out the cached session then retry sign-in.
+      if (
+        message.includes("There is already a signed in user") ||
+        message.includes("UserAlreadyAuthenticatedException")
+      ) {
+        try {
+          await signOut();
+          const retryResult = await signIn({ username: email, password });
+          if (retryResult.isSignedIn) {
+            router.push("/dashboard");
+            return;
+          }
+        } catch (retryErr: unknown) {
+          setError(retryErr instanceof Error ? retryErr.message : "Login failed");
+        }
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }

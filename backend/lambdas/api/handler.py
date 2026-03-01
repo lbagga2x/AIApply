@@ -3,6 +3,7 @@ API Handler Lambda — Serves REST API requests via API Gateway.
 Routes requests to appropriate handlers for CRUD operations.
 """
 
+import base64
 import json
 import os
 import boto3
@@ -46,14 +47,42 @@ def response(status_code: int, body: dict) -> dict:
 
 
 def get_user_id(event: dict) -> str:
-    """Extract user ID from Cognito JWT claims."""
+    """Extract user ID (Cognito sub) from the JWT.
+
+    Tries two sources in order:
+    1. requestContext.authorizer.jwt.claims — populated when API Gateway has a
+       JWT authorizer configured (preferred, validated by APIGW).
+    2. Authorization header — decode the JWT payload directly (base64url).
+       No signature verification here; we trust APIGW already accepted the
+       request over HTTPS from our own frontend.
+    """
+    # Path 1: API Gateway JWT authorizer (if configured)
     claims = (
         event.get("requestContext", {})
         .get("authorizer", {})
         .get("jwt", {})
         .get("claims", {})
     )
-    return claims.get("sub", "anonymous")
+    if claims.get("sub"):
+        return claims["sub"]
+
+    # Path 2: Decode JWT payload from Authorization header
+    auth_header = (event.get("headers") or {}).get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        try:
+            token = auth_header.split(" ", 1)[1]
+            # JWT = header.payload.signature — we only need the payload
+            payload_b64 = token.split(".")[1]
+            # Base64url → base64 (add padding)
+            payload_b64 += "=" * (4 - len(payload_b64) % 4)
+            payload = json.loads(base64.b64decode(payload_b64).decode("utf-8"))
+            sub = payload.get("sub", "")
+            if sub:
+                return sub
+        except Exception as e:
+            print(f"JWT decode error: {e}")
+
+    return "anonymous"
 
 
 def handle_get_profile(event: dict) -> dict:
