@@ -65,16 +65,21 @@ jobs:
         run: |
           for func_dir in backend/lambdas/*/; do
             func_name=$(basename "$func_dir")
-            echo "Deploying $func_name..."
+            # Map directory name → Terraform function name:
+            #   underscores → hyphens, api → api-handler
+            lambda_name="${func_name//_/-}"
+            [ "$lambda_name" = "api" ] && lambda_name="api-handler"
+            echo "Deploying $func_name → aiapply-dev-${lambda_name}..."
             cd "$func_dir"
-            pip install -r requirements.txt -t package/ 2>/dev/null || true
-            cp *.py package/ 2>/dev/null || true
+            mkdir -p package
+            pip install -r "$GITHUB_WORKSPACE/backend/requirements.txt" -t package/ --quiet
+            cp *.py package/
             cd package
-            zip -r "../${func_name}.zip" . 2>/dev/null || cd .. && zip "${func_name}.zip" *.py
+            zip -r "../${func_name}.zip" . -q
             cd ..
             aws lambda update-function-code \
-              --function-name "aiapply-dev-${func_name}" \
+              --function-name "aiapply-dev-${lambda_name}" \
               --zip-file "fileb://${func_name}.zip" \
-              --no-cli-pager || echo "Function aiapply-dev-${func_name} not found, skipping"
+              --no-cli-pager || echo "Function aiapply-dev-${lambda_name} not found, skipping"
             cd $GITHUB_WORKSPACE
           done
