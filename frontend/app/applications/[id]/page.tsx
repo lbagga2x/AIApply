@@ -40,6 +40,12 @@ const CHANGE_COLOURS: Record<string, string> = {
   removed:  "text-red-700 bg-red-50 border-red-200",
 };
 
+// Required for output: "export" — IDs are not known at build time,
+// so pages are rendered client-side via SPA routing (CloudFront → index.html).
+export function generateStaticParams() {
+  return [];
+}
+
 export default function ApplicationDetailPage() {
   return (
     <div className="min-h-screen bg-background">
