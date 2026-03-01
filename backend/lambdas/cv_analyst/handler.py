@@ -68,7 +68,7 @@ def parse_cv_with_claude(cv_text: str) -> dict:
     client = get_anthropic_client()
 
     message = client.messages.create(
-        model="claude-sonnet-4-5-20250514",
+        model="claude-sonnet-4-5-20250929",
         max_tokens=4096,
         messages=[
             {

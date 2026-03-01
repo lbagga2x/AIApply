@@ -9,7 +9,16 @@ import os
 import uuid
 import boto3
 import anthropic
+from decimal import Decimal
 from datetime import datetime, timezone
+
+
+class DecimalEncoder(json.JSONEncoder):
+    """DynamoDB returns numbers as Decimal — convert to float for JSON serialization."""
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
 
 s3_client = boto3.client("s3")
 dynamodb = boto3.resource("dynamodb")
@@ -94,11 +103,11 @@ def score_jobs_with_claude(jobs: list[dict], career_goals: dict, cv_summary: str
         "workArrangement": career_goals.get("workArrangement", ["Remote"]),
         "dealbreakers": career_goals.get("dealbreakers", []),
         "minSalary": career_goals.get("minSalary"),
-    })
+    }, cls=DecimalEncoder)
 
     message = client.messages.create(
-        model="claude-haiku-4-5-20250514",
-        max_tokens=2048,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=4096,
         messages=[{
             "role": "user",
             "content": f"""Score these job listings for a candidate.

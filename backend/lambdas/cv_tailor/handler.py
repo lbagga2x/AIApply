@@ -45,7 +45,7 @@ def tailor_cv(cv_data: dict, job: dict) -> dict:
     job_desc = f"{job.get('title')} at {job.get('company')}\n\n{job.get('description', '')}"
 
     message = client.messages.create(
-        model="claude-sonnet-4-5-20250514",
+        model="claude-sonnet-4-5-20250929",
         max_tokens=4096,
         system="""You are an expert CV writer. Your job is to tailor a candidate's CV
 for a specific role without fabricating experience. You reorder, reframe, and

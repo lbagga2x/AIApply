@@ -15,7 +15,7 @@ httpx==0.28.1
 idna==3.11
 jiter==0.13.0
 jmespath==1.1.0
-jobspy==0.31.0
+python-jobspy
 jsonpatch==1.33
 jsonpointer==3.0.0
 langchain-core==0.3.83
