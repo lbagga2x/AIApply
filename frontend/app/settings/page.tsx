@@ -69,7 +69,7 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Career Goals</CardTitle>
-            <CardDescription>Update what you're looking for — affects all future job matching</CardDescription>
+            <CardDescription>Update what you&apos;re looking for — affects all future job matching</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSave} className="space-y-4">
@@ -120,7 +120,7 @@ export default function SettingsPage() {
               <input type="radio" name="mode" checked={!autoApply} onChange={() => setAutoApply(false)} className="mt-1" />
               <div>
                 <p className="font-medium">Review First (Recommended)</p>
-                <p className="text-sm text-muted-foreground">You approve each tailored CV before it's submitted</p>
+                <p className="text-sm text-muted-foreground">You approve each tailored CV before it&apos;s submitted</p>
               </div>
             </label>
             <label className="flex items-start gap-3 cursor-pointer">

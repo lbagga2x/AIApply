@@ -153,7 +153,6 @@ def handle_get_career_goals(event: dict) -> dict:
 
 def lambda_handler(event, context):
     """Main Lambda handler — routes requests based on path and method."""
-    route_key = event.get("routeKey", "")
     raw_path = event.get("rawPath", "")
     method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
 

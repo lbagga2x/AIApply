@@ -108,7 +108,7 @@ export default function OnboardingPage() {
           <Card>
             <CardHeader>
               <CardTitle>Upload your CV</CardTitle>
-              <CardDescription>PDF or DOCX — we'll extract your experience automatically</CardDescription>
+              <CardDescription>PDF or DOCX — we&apos;ll extract your experience automatically</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div
@@ -257,7 +257,7 @@ export default function OnboardingPage() {
                     value={dealbreakers}
                     onChange={(e) => setDealbreakers(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground">We'll skip any jobs matching these</p>
+                  <p className="text-xs text-muted-foreground">We&apos;ll skip any jobs matching these</p>
                 </div>
 
                 <Button type="submit" className="w-full" disabled={savingGoals}>
@@ -273,7 +273,7 @@ export default function OnboardingPage() {
           <Card>
             <CardContent className="pt-10 pb-10 text-center space-y-2">
               <p className="text-5xl">🎉</p>
-              <p className="text-lg font-semibold">You're all set!</p>
+              <p className="text-lg font-semibold">You&apos;re all set!</p>
               <p className="text-muted-foreground">Taking you to your dashboard…</p>
             </CardContent>
           </Card>
