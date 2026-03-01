@@ -1,10 +1,10 @@
 import ApplicationDetailClient from "./application-detail-client";
 
-// IDs are not known at build time — pages are rendered client-side via
-// SPA routing (CloudFront 404 → index.html → Next.js router).
-// generateStaticParams must live in a server component (no "use client").
+// Real IDs are not known at build time. A placeholder is returned so
+// Next.js accepts the static export. All real /applications/[id] URLs
+// are served via CloudFront 404 → index.html → client-side router.
 export function generateStaticParams() {
-  return [];
+  return [{ id: "placeholder" }];
 }
 
 export default function ApplicationDetailPage() {
