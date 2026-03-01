@@ -49,6 +49,9 @@ jobs:
   deploy-backend:
     runs-on: ubuntu-latest
     environment: production
+    env:
+      PREFIX: aiapply-dev
+      BUILD_DIR: /tmp/lambda_build
     steps:
       - uses: actions/checkout@v4
 
@@ -63,23 +66,70 @@ jobs:
 
       - name: Package and deploy Lambda functions
         run: |
-          for func_dir in backend/lambdas/*/; do
-            func_name=$(basename "$func_dir")
-            # Map directory name → Terraform function name:
-            #   underscores → hyphens, api → api-handler
-            lambda_name="${func_name//_/-}"
-            [ "$lambda_name" = "api" ] && lambda_name="api-handler"
-            echo "Deploying $func_name → aiapply-dev-${lambda_name}..."
-            cd "$func_dir"
-            mkdir -p package
-            pip install -r "$GITHUB_WORKSPACE/backend/requirements.txt" -t package/ --quiet
-            cp *.py package/
-            cd package
-            zip -r "../${func_name}.zip" . -q
-            cd ..
-            aws lambda update-function-code \
-              --function-name "aiapply-dev-${lambda_name}" \
-              --zip-file "fileb://${func_name}.zip" \
-              --no-cli-pager || echo "Function aiapply-dev-${lambda_name} not found, skipping"
-            cd $GITHUB_WORKSPACE
-          done
+          set -e
+          mkdir -p "$BUILD_DIR"
+
+          # Helper: install binary wheels for Lambda's Linux x86_64 runtime
+          pip_lambda() {
+            local target="$1"; shift
+            pip install \
+              --platform manylinux2014_x86_64 \
+              --target "$target" \
+              --python-version 3.12 \
+              --only-binary=:all: \
+              --quiet "$@"
+          }
+
+          # Helper: upload via S3 when zip > 50 MB (Lambda direct limit)
+          deploy_lambda() {
+            local name="$1" zip="$2"
+            local size_mb=$(( $(stat -c%s "$zip") / 1048576 ))
+            if [ "$size_mb" -ge 50 ]; then
+              echo "  Large package (${size_mb} MB) — uploading via S3"
+              local s3_key="lambda-deploy/${name}.zip"
+              aws s3 cp "$zip" "s3://${{ vars.FRONTEND_BUCKET }}/${s3_key}" --no-progress
+              aws lambda update-function-code \
+                --function-name "$name" \
+                --s3-bucket "${{ vars.FRONTEND_BUCKET }}" \
+                --s3-key "$s3_key" \
+                --no-cli-pager
+            else
+              aws lambda update-function-code \
+                --function-name "$name" \
+                --zip-file "fileb://${zip}" \
+                --no-cli-pager
+            fi
+          }
+
+          # --- api (no extra deps — boto3 is built into Lambda runtime) ---
+          echo "=== api ==="
+          PKG="$BUILD_DIR/api" && mkdir -p "$PKG"
+          cp backend/lambdas/api/handler.py "$PKG/"
+          (cd "$PKG" && zip -r "$BUILD_DIR/api.zip" . -q)
+          deploy_lambda "$PREFIX-api-handler" "$BUILD_DIR/api.zip"
+
+          # --- cv_analyst ---
+          echo "=== cv_analyst ==="
+          PKG="$BUILD_DIR/cv_analyst" && mkdir -p "$PKG"
+          cp backend/lambdas/cv_analyst/handler.py "$PKG/"
+          pip_lambda "$PKG" anthropic==0.84.0 PyPDF2==3.0.1 python-docx==1.2.0
+          (cd "$PKG" && zip -r "$BUILD_DIR/cv_analyst.zip" . -q)
+          deploy_lambda "$PREFIX-cv-analyst" "$BUILD_DIR/cv_analyst.zip"
+
+          # --- job_scout (python-jobspy pulls pandas+numpy — may exceed 50 MB) ---
+          echo "=== job_scout ==="
+          PKG="$BUILD_DIR/job_scout" && mkdir -p "$PKG"
+          cp backend/lambdas/job_scout/handler.py "$PKG/"
+          pip_lambda "$PKG" anthropic==0.84.0 python-jobspy
+          (cd "$PKG" && zip -r "$BUILD_DIR/job_scout.zip" . -q)
+          deploy_lambda "$PREFIX-job-scout" "$BUILD_DIR/job_scout.zip"
+
+          # --- cv_tailor ---
+          echo "=== cv_tailor ==="
+          PKG="$BUILD_DIR/cv_tailor" && mkdir -p "$PKG"
+          cp backend/lambdas/cv_tailor/handler.py "$PKG/"
+          pip_lambda "$PKG" anthropic==0.84.0
+          (cd "$PKG" && zip -r "$BUILD_DIR/cv_tailor.zip" . -q)
+          deploy_lambda "$PREFIX-cv-tailor" "$BUILD_DIR/cv_tailor.zip"
+
+          echo "=== All Lambdas deployed ==="
