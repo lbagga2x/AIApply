@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  # LocalStack for AWS service emulation
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566" # LocalStack Gateway
+    environment:
+      - SERVICES=s3,dynamodb,sqs,secretsmanager,lambda
+      - DEFAULT_REGION=us-east-1
+      - DEBUG=0
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh
+
+volumes:
+  localstack_data:

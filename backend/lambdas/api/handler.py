@@ -1,0 +1,178 @@
+"""
+API Handler Lambda — Serves REST API requests via API Gateway.
+Routes requests to appropriate handlers for CRUD operations.
+"""
+
+import json
+import os
+import boto3
+from decimal import Decimal
+
+dynamodb = boto3.resource("dynamodb")
+s3 = boto3.client("s3")
+
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+CV_BUCKET = os.environ.get("CV_BUCKET", "aiapply-dev-cv-storage")
+
+# Table references
+USERS_TABLE = f"aiapply-{ENVIRONMENT}-users"
+CVS_TABLE = f"aiapply-{ENVIRONMENT}-cvs"
+APPLICATIONS_TABLE = f"aiapply-{ENVIRONMENT}-applications"
+JOBS_TABLE = f"aiapply-{ENVIRONMENT}-job-listings"
+
+
+class DecimalEncoder(json.JSONEncoder):
+    """Handle DynamoDB Decimal types in JSON serialization."""
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
+
+
+def response(status_code: int, body: dict) -> dict:
+    """Create API Gateway response."""
+    return {
+        "statusCode": status_code,
+        "headers": {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        },
+        "body": json.dumps(body, cls=DecimalEncoder),
+    }
+
+
+def get_user_id(event: dict) -> str:
+    """Extract user ID from Cognito JWT claims."""
+    claims = (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("jwt", {})
+        .get("claims", {})
+    )
+    return claims.get("sub", "anonymous")
+
+
+def handle_get_profile(event: dict) -> dict:
+    """GET /api/profile — Get user profile and CV data."""
+    user_id = get_user_id(event)
+    table = dynamodb.Table(CVS_TABLE)
+
+    result = table.query(
+        KeyConditionExpression="userId = :uid",
+        ExpressionAttributeValues={":uid": user_id},
+    )
+
+    cvs = result.get("Items", [])
+    # Parse structured data JSON strings back to dicts
+    for cv in cvs:
+        if "structuredData" in cv and isinstance(cv["structuredData"], str):
+            cv["structuredData"] = json.loads(cv["structuredData"])
+
+    return response(200, {"userId": user_id, "cvs": cvs})
+
+
+def handle_get_applications(event: dict) -> dict:
+    """GET /api/applications — Get all applications for the user."""
+    user_id = get_user_id(event)
+    table = dynamodb.Table(APPLICATIONS_TABLE)
+
+    result = table.query(
+        KeyConditionExpression="userId = :uid",
+        ExpressionAttributeValues={":uid": user_id},
+        ScanIndexForward=False,  # newest first
+    )
+
+    return response(200, {"applications": result.get("Items", [])})
+
+
+def handle_get_upload_url(event: dict) -> dict:
+    """POST /api/upload-url — Generate presigned S3 URL for CV upload."""
+    user_id = get_user_id(event)
+    body = json.loads(event.get("body", "{}"))
+    file_name = body.get("fileName", "cv.pdf")
+    file_type = body.get("fileType", "application/pdf")
+
+    # Sanitize filename
+    safe_name = file_name.replace(" ", "_").replace("/", "_")
+    cv_id = safe_name.rsplit(".", 1)[0]
+    s3_key = f"uploads/{user_id}/{safe_name}"
+
+    presigned_url = s3.generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": CV_BUCKET,
+            "Key": s3_key,
+            "ContentType": file_type,
+        },
+        ExpiresIn=300,  # 5 minutes
+    )
+
+    return response(200, {
+        "uploadUrl": presigned_url,
+        "s3Key": s3_key,
+        "cvId": cv_id,
+    })
+
+
+def handle_save_career_goals(event: dict) -> dict:
+    """POST /api/career-goals — Save user's career goals."""
+    user_id = get_user_id(event)
+    body = json.loads(event.get("body", "{}"))
+
+    table = dynamodb.Table(USERS_TABLE)
+    table.put_item(
+        Item={
+            "userId": user_id,
+            "careerGoals": {
+                "targetRoles": body.get("targetRoles", []),
+                "targetIndustries": body.get("targetIndustries", []),
+                "minSalary": body.get("minSalary"),
+                "maxSalary": body.get("maxSalary"),
+                "locations": body.get("locations", []),
+                "workArrangement": body.get("workArrangement", ["remote"]),
+                "dealbreakers": body.get("dealbreakers", []),
+            },
+        }
+    )
+
+    return response(200, {"message": "Career goals saved"})
+
+
+def handle_get_career_goals(event: dict) -> dict:
+    """GET /api/career-goals — Get user's career goals."""
+    user_id = get_user_id(event)
+    table = dynamodb.Table(USERS_TABLE)
+
+    result = table.get_item(Key={"userId": user_id})
+    item = result.get("Item", {})
+
+    return response(200, {"careerGoals": item.get("careerGoals", {})})
+
+
+def lambda_handler(event, context):
+    """Main Lambda handler — routes requests based on path and method."""
+    route_key = event.get("routeKey", "")
+    raw_path = event.get("rawPath", "")
+    method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+
+    print(f"Request: {method} {raw_path}")
+
+    # Route mapping
+    if method == "OPTIONS":
+        return response(200, {})
+    elif raw_path == "/api/profile" and method == "GET":
+        return handle_get_profile(event)
+    elif raw_path == "/api/applications" and method == "GET":
+        return handle_get_applications(event)
+    elif raw_path == "/api/upload-url" and method == "POST":
+        return handle_get_upload_url(event)
+    elif raw_path == "/api/career-goals" and method == "POST":
+        return handle_save_career_goals(event)
+    elif raw_path == "/api/career-goals" and method == "GET":
+        return handle_get_career_goals(event)
+    elif raw_path == "/api/health":
+        return response(200, {"status": "healthy", "environment": ENVIRONMENT})
+    else:
+        return response(404, {"error": f"Not found: {method} {raw_path}"})

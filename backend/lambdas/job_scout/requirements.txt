@@ -1,0 +1,3 @@
+anthropic>=0.40.0
+boto3>=1.34.0
+jobspy>=0.30.0
