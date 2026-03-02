@@ -17,6 +17,8 @@ permissions:
 env:
   AWS_REGION: us-east-1
   TF_WORKING_DIR: infrastructure/terraform/environments/dev
+  # Terraform reads TF_VAR_* env vars automatically — avoids interactive prompt
+  TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
 jobs:
   plan:
