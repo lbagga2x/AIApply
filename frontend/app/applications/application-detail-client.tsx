@@ -7,8 +7,24 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { isAuthenticated } from "@/lib/auth";
-import { getApplications, approveApplication, getTailoredCV, deleteApplication, tailorApplication } from "@/lib/api";
+import {
+  getApplications,
+  approveApplication,
+  getTailoredCV,
+  deleteApplication,
+  tailorApplication,
+  updateApplicationStatus,
+} from "@/lib/api";
 
 interface Change {
   type: "added" | "modified" | "removed";
@@ -80,6 +96,16 @@ const STATUS_LABELS: Record<string, string> = {
   rejected:  "Rejected",
 };
 
+const STATUS_OPTIONS: { key: string; label: string }[] = [
+  { key: "matched", label: "Matched" },
+  { key: "tailoring", label: "Tailoring" },
+  { key: "review", label: "Review" },
+  { key: "submitted", label: "Submitted" },
+  { key: "interview", label: "Interview" },
+  { key: "offer", label: "Offer" },
+  { key: "rejected", label: "Rejected" },
+];
+
 export default function ApplicationDetailClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -93,6 +119,8 @@ export default function ApplicationDetailClient() {
   const [approveError, setApproveError] = useState("");
   const [tailoring, setTailoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const [statusError, setStatusError] = useState("");
   const [error, setError] = useState("");
   const [copiedCover, setCopiedCover] = useState(false);
   const [copiedCv, setCopiedCv] = useState(false);
@@ -184,6 +212,21 @@ export default function ApplicationDetailClient() {
     }
   }
 
+  async function handleStatusChange(nextStatus: string) {
+    if (!app || statusUpdating) return;
+    if (nextStatus === app.status) return;
+    setStatusUpdating(true);
+    setStatusError("");
+    try {
+      await updateApplicationStatus(app.applicationId, nextStatus);
+      setApp((prev) => (prev ? { ...prev, status: nextStatus } : prev));
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "Failed to update status");
+    } finally {
+      setStatusUpdating(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -251,13 +294,46 @@ export default function ApplicationDetailClient() {
           <span className="font-semibold">
             {app.companyName || "Company"} — {app.jobTitle || "Role"}
           </span>
-          <Badge className="ml-auto" variant={isSubmitted ? "default" : "secondary"}>
-            {statusLabel}
-          </Badge>
+          <div className="ml-auto flex items-center gap-2">
+            <Badge variant={isSubmitted ? "default" : "secondary"}>
+              {statusLabel}
+            </Badge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={statusUpdating}
+                  className="h-8 text-[13px]"
+                >
+                  {statusUpdating ? "Saving…" : "Update status"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-48">
+                <DropdownMenuLabel>Move to…</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={app.status}
+                  onValueChange={(val) => void handleStatusChange(val)}
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                    <DropdownMenuRadioItem key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {statusError && (
+          <div className="mb-4 text-sm px-4 py-3 rounded-xl border bg-destructive/5 border-destructive/20 text-destructive">
+            {statusError}
+          </div>
+        )}
         <div className="grid lg:grid-cols-2 gap-6">
 
           {/* ── Left: scores + reason + cover letter ── */}

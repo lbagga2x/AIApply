@@ -375,6 +375,66 @@ def handle_approve_application(event: dict) -> dict:
     return response(200, {"message": "Application approved and marked as submitted"})
 
 
+def handle_update_application_status(event: dict) -> dict:
+    """PUT /api/applications/status — Update an application's pipeline status."""
+    user_id = get_user_id(event)
+    body = json.loads(event.get("body", "{}"))
+    application_id = body.get("applicationId")
+    new_status = body.get("status")
+
+    if not application_id:
+        return response(400, {"error": "applicationId required"})
+    if not new_status:
+        return response(400, {"error": "status required"})
+
+    allowed_statuses = {
+        "pending",
+        "matched",
+        "matching",
+        "tailoring",
+        "review",
+        "submitted",
+        "interview",
+        "offer",
+        "rejected",
+    }
+    if new_status not in allowed_statuses:
+        return response(400, {"error": f"Invalid status: {new_status}"})
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Always record the last time status was changed.
+    update_expr = "SET #status = :s, updatedAt = :t"
+    expr_attr_names = {"#status": "status"}
+    expr_attr_values = {":s": new_status, ":t": now}
+
+    # Convenience timestamps for later analytics.
+    if new_status == "submitted":
+        update_expr += ", submittedAt = :t"
+    elif new_status == "interview":
+        update_expr += ", interviewAt = :t"
+    elif new_status == "offer":
+        update_expr += ", offerAt = :t"
+    elif new_status == "rejected":
+        update_expr += ", rejectedAt = :t"
+
+    table = dynamodb.Table(APPLICATIONS_TABLE)
+
+    # Verify ownership and existence.
+    existing = table.get_item(Key={"userId": user_id, "applicationId": application_id}).get("Item")
+    if not existing:
+        return response(404, {"error": "Application not found"})
+
+    table.update_item(
+        Key={"userId": user_id, "applicationId": application_id},
+        UpdateExpression=update_expr,
+        ExpressionAttributeNames=expr_attr_names,
+        ExpressionAttributeValues=expr_attr_values,
+    )
+
+    return response(200, {"message": "Status updated", "status": new_status, "updatedAt": now})
+
+
 def handle_delete_account(event: dict) -> dict:
     """DELETE /api/account — Permanently erase every record and file for this user."""
     user_id = get_user_id(event)
@@ -480,6 +540,8 @@ def lambda_handler(event, context):
         return handle_tailor_application(event)
     elif raw_path == "/api/applications/approve" and method == "POST":
         return handle_approve_application(event)
+    elif raw_path == "/api/applications/status" and method == "PUT":
+        return handle_update_application_status(event)
     elif raw_path == "/api/applications/tailored-cv" and method == "GET":
         return handle_get_tailored_cv(event)
     elif raw_path == "/api/upload-url" and method == "POST":

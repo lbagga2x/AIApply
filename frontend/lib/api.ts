@@ -78,6 +78,13 @@ export async function tailorApplication(applicationId: string) {
   });
 }
 
+export async function updateApplicationStatus(applicationId: string, status: string) {
+  return apiFetch("/api/applications/status", {
+    method: "PUT",
+    body: JSON.stringify({ applicationId, status }),
+  });
+}
+
 export async function scanJobs() {
   return apiFetch("/api/jobs/scan", { method: "POST" });
 }
