@@ -27,6 +27,14 @@ variable "sqs_queue_arns" {
   type = list(string)
 }
 
+variable "sqs_job_scout_queue_arn" {
+  type = string
+}
+
+variable "sqs_cv_tailor_queue_arn" {
+  type = string
+}
+
 variable "cognito_user_pool_arn" {
   type = string
 }
@@ -290,6 +298,22 @@ resource "aws_lambda_permission" "api_gateway" {
   function_name = aws_lambda_function.api_handler.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+# --- SQS → Lambda event source mappings ---
+# batch_size=1: each job scout / CV tailor runs in its own Lambda invocation
+resource "aws_lambda_event_source_mapping" "job_scout_sqs" {
+  event_source_arn = var.sqs_job_scout_queue_arn
+  function_name    = aws_lambda_function.job_scout.arn
+  batch_size       = 1
+  enabled          = true
+}
+
+resource "aws_lambda_event_source_mapping" "cv_tailor_sqs" {
+  event_source_arn = var.sqs_cv_tailor_queue_arn
+  function_name    = aws_lambda_function.cv_tailor.arn
+  batch_size       = 1
+  enabled          = true
 }
 
 # --- Outputs ---
