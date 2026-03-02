@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { isAuthenticated } from "@/lib/auth";
-import { getApplications } from "@/lib/api";
+import { getApplications, approveApplication, getTailoredCV } from "@/lib/api";
 
 interface Change {
   type: "added" | "modified" | "removed";
@@ -16,18 +16,43 @@ interface Change {
   description: string;
 }
 
+interface ExperienceEntry {
+  title?: string;
+  company?: string;
+  startDate?: string;
+  endDate?: string;
+  description?: string;
+  highlights?: string[];
+}
+
+interface EducationEntry {
+  degree?: string;
+  institution?: string;
+  year?: string;
+  field?: string;
+}
+
+interface TailoredCV {
+  name?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  summary?: string;
+  skills?: string[];
+  experience?: ExperienceEntry[];
+  education?: EducationEntry[];
+  certifications?: string[];
+}
+
 interface ApplicationDetail {
   applicationId: string;
-  userId: string;
-  jobId?: string;
-  cvId?: string;
   status: string;
   companyName?: string;
   jobTitle?: string;
   matchScore?: string | number;
   careerAlignmentScore?: string | number;
   matchReason?: string;
-  cvChanges?: string; // JSON string stored by cv_tailor
+  cvChanges?: string;
   tailoredCvKey?: string;
   atsScore?: string | number;
   coverLetter?: string;
@@ -57,42 +82,40 @@ export default function ApplicationDetailClient() {
   const id = searchParams.get("id");
 
   const [app, setApp] = useState<ApplicationDetail | null>(null);
+  const [tailoredCV, setTailoredCV] = useState<TailoredCV | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cvLoading, setCvLoading] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
     let mounted = true;
 
     async function loadData() {
-      // No ID → go back to dashboard
-      if (!id) {
-        router.replace("/dashboard");
-        return;
-      }
+      if (!id) { router.replace("/dashboard"); return; }
 
-      // Auth check — fetchAuthSession auto-refreshes expired tokens
       const ok = await isAuthenticated();
       if (!mounted) return;
-      if (!ok) {
-        router.push("/login");
-        return;
-      }
+      if (!ok) { router.push("/login"); return; }
 
-      // Fetch all applications then find the matching one
       try {
         const data = await getApplications();
-        const apps: ApplicationDetail[] = data.applications || [];
-        const found = apps.find((a) => a.applicationId === id);
+        const found = (data.applications || []).find(
+          (a: ApplicationDetail) => a.applicationId === id
+        );
         if (!mounted) return;
         if (found) {
           setApp(found);
+          // Auto-fetch tailored CV if it's ready
+          if (found.tailoredCvKey) {
+            fetchTailoredCV(id);
+          }
         } else {
           setError("Application not found");
         }
       } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : "Failed to load application");
-        }
+        if (mounted) setError(err instanceof Error ? err.message : "Failed to load");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -102,7 +125,32 @@ export default function ApplicationDetailClient() {
     return () => { mounted = false; };
   }, [id, router]);
 
-  // --- Loading ---
+  async function fetchTailoredCV(applicationId: string) {
+    setCvLoading(true);
+    try {
+      const data = await getTailoredCV(applicationId);
+      setTailoredCV(data.tailoredCV);
+    } catch {
+      // non-fatal — CV tab just won't show
+    } finally {
+      setCvLoading(false);
+    }
+  }
+
+  async function handleApprove() {
+    if (!app || approving) return;
+    setApproving(true);
+    setApproveError("");
+    try {
+      await approveApplication(app.applicationId);
+      setApp((prev) => prev ? { ...prev, status: "submitted" } : prev);
+    } catch (err) {
+      setApproveError(err instanceof Error ? err.message : "Failed to approve");
+    } finally {
+      setApproving(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -111,32 +159,26 @@ export default function ApplicationDetailClient() {
     );
   }
 
-  // --- Error / not found ---
   if (error || !app) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <p className="text-muted-foreground">{error || "Application not found"}</p>
-        <Button asChild variant="outline">
-          <Link href="/dashboard">← Back to Dashboard</Link>
-        </Button>
+        <Button asChild variant="outline"><Link href="/dashboard">← Back to Dashboard</Link></Button>
       </div>
     );
   }
 
-  // Parse cvChanges (stored as JSON string by cv_tailor Lambda)
   let changes: Change[] = [];
   if (app.cvChanges) {
-    try {
-      changes = JSON.parse(app.cvChanges);
-    } catch {
-      changes = [];
-    }
+    try { changes = JSON.parse(app.cvChanges); } catch { changes = []; }
   }
 
-  const matchScore = Number(app.matchScore) || 0;
+  const matchScore     = Number(app.matchScore) || 0;
   const alignmentScore = Number(app.careerAlignmentScore) || 0;
-  const atsScore = Number(app.atsScore) || 0;
-  const statusLabel = STATUS_LABELS[app.status] ?? app.status;
+  const atsScore       = Number(app.atsScore) || 0;
+  const statusLabel    = STATUS_LABELS[app.status] ?? app.status;
+  const canApprove     = app.status === "review";
+  const isSubmitted    = app.status === "submitted";
 
   return (
     <div className="min-h-screen bg-background">
@@ -150,14 +192,16 @@ export default function ApplicationDetailClient() {
           <span className="font-semibold">
             {app.companyName || "Company"} — {app.jobTitle || "Role"}
           </span>
-          <Badge className="ml-auto">{statusLabel}</Badge>
+          <Badge className="ml-auto" variant={isSubmitted ? "default" : "secondary"}>
+            {statusLabel}
+          </Badge>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid lg:grid-cols-2 gap-6">
 
-          {/* Left: scores + match reason + cover letter */}
+          {/* ── Left: scores + reason + cover letter ── */}
           <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
@@ -167,13 +211,9 @@ export default function ApplicationDetailClient() {
                     <p className="text-muted-foreground font-medium">{app.companyName || "Company"}</p>
                   </div>
                   <div className="text-right text-sm space-y-1">
-                    {matchScore > 0 && (
-                      <Badge variant="secondary">{matchScore}% match</Badge>
-                    )}
+                    {matchScore > 0 && <Badge variant="secondary">{matchScore}% match</Badge>}
                     <div />
-                    {alignmentScore > 0 && (
-                      <Badge variant="outline">{alignmentScore}% career fit</Badge>
-                    )}
+                    {alignmentScore > 0 && <Badge variant="outline">{alignmentScore}% career fit</Badge>}
                   </div>
                 </div>
               </CardHeader>
@@ -181,21 +221,13 @@ export default function ApplicationDetailClient() {
                 <Tabs defaultValue="alignment">
                   <TabsList className="mb-3">
                     <TabsTrigger value="alignment">Why You</TabsTrigger>
-                    {app.coverLetter && (
-                      <TabsTrigger value="cover">Cover Letter</TabsTrigger>
-                    )}
+                    {app.coverLetter && <TabsTrigger value="cover">Cover Letter</TabsTrigger>}
                   </TabsList>
-
                   <TabsContent value="alignment" className="text-sm leading-relaxed">
-                    {app.matchReason ? (
-                      <p className="text-muted-foreground">{app.matchReason}</p>
-                    ) : (
-                      <p className="text-muted-foreground italic">
-                        Match reasoning not yet available.
-                      </p>
-                    )}
+                    <p className="text-muted-foreground">
+                      {app.matchReason || "Match reasoning not yet available."}
+                    </p>
                   </TabsContent>
-
                   {app.coverLetter && (
                     <TabsContent
                       value="cover"
@@ -212,63 +244,105 @@ export default function ApplicationDetailClient() {
             <div className="flex gap-3">
               <Button
                 className="flex-1"
-                disabled={app.status !== "review"}
-                title={
-                  app.status !== "review"
-                    ? "CV tailoring must complete before you can approve"
-                    : ""
-                }
+                disabled={!canApprove || approving}
+                onClick={handleApprove}
               >
-                ✓ Approve &amp; Submit
+                {approving ? "Submitting…" : isSubmitted ? "✓ Submitted" : "✓ Approve & Submit"}
               </Button>
-              <Button variant="ghost" onClick={() => router.push("/dashboard")}>
-                ← Back
-              </Button>
+              <Button variant="ghost" onClick={() => router.push("/dashboard")}>← Back</Button>
             </div>
 
-            {app.status === "tailoring" && (
+            {approveError && (
+              <p className="text-xs text-red-600 text-center">{approveError}</p>
+            )}
+
+            {!canApprove && !isSubmitted && (
               <p className="text-xs text-muted-foreground text-center">
-                ✏️ AI is tailoring your CV for this role — usually takes 1–2 minutes.
-                Refresh to check for updates.
+                {app.status === "tailoring"
+                  ? "✏️ AI is tailoring your CV — usually takes 1–2 minutes. Refresh to check."
+                  : "Button unlocks once the CV has been tailored and is ready for review."}
               </p>
             )}
+
+            {isSubmitted && (
+              <p className="text-xs text-green-600 text-center font-medium">
+                ✓ Application approved and marked as submitted
+              </p>
+            )}
+
+            {/* Metadata */}
+            <Card>
+              <CardContent className="pt-4 pb-4 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Status</p>
+                  <p className="font-medium">{statusLabel}</p>
+                </div>
+                {app.createdAt && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Found</p>
+                    <p className="font-medium">
+                      {new Date(app.createdAt).toLocaleDateString("en-GB", {
+                        day: "numeric", month: "short", year: "numeric",
+                      })}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Right: CV changes + ATS score + metadata */}
+          {/* ── Right: changes + tailored CV + ATS ── */}
           <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  CV Changes for {app.companyName || "this role"}
-                </CardTitle>
+                <CardTitle className="text-base">Your Tailored Application</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  {changes.length > 0
-                    ? "What we tailored to match this role and company"
+                  {tailoredCV
+                    ? "Review the changes and the full rewritten CV below"
                     : app.status === "tailoring"
-                    ? "Tailoring in progress — changes will appear shortly"
-                    : "No tailoring changes recorded yet"}
+                    ? "Tailoring in progress — check back in a moment"
+                    : "CV not yet tailored"}
                 </p>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {changes.length > 0 ? (
-                  changes.map((change, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-start gap-2 text-sm px-3 py-2 rounded border ${
-                        CHANGE_COLOURS[change.type] ?? ""
-                      }`}
-                    >
-                      <span className="font-semibold capitalize whitespace-nowrap">
-                        {change.type}
-                      </span>
-                      <span>{change.description}</span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground py-2">
-                    {app.status === "tailoring" ? "⏳ Check back in a moment…" : "—"}
-                  </p>
-                )}
+              <CardContent>
+                <Tabs defaultValue="changes">
+                  <TabsList className="mb-3">
+                    <TabsTrigger value="changes">Changes ({changes.length})</TabsTrigger>
+                    {(tailoredCV || cvLoading) && (
+                      <TabsTrigger value="cv">Tailored CV</TabsTrigger>
+                    )}
+                  </TabsList>
+
+                  {/* Changes tab */}
+                  <TabsContent value="changes" className="space-y-2">
+                    {changes.length > 0 ? (
+                      changes.map((change, i) => (
+                        <div
+                          key={i}
+                          className={`flex items-start gap-2 text-sm px-3 py-2 rounded border ${CHANGE_COLOURS[change.type] ?? ""}`}
+                        >
+                          <span className="font-semibold capitalize whitespace-nowrap">{change.type}</span>
+                          <span>{change.description}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-2">
+                        {app.status === "tailoring" ? "⏳ Check back in a moment…" : "—"}
+                      </p>
+                    )}
+                  </TabsContent>
+
+                  {/* Full tailored CV tab */}
+                  {(tailoredCV || cvLoading) && (
+                    <TabsContent value="cv">
+                      {cvLoading ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">Loading CV…</p>
+                      ) : tailoredCV ? (
+                        <TailoredCVView cv={tailoredCV} />
+                      ) : null}
+                    </TabsContent>
+                  )}
+                </Tabs>
               </CardContent>
             </Card>
 
@@ -281,9 +355,7 @@ export default function ApplicationDetailClient() {
                     <p className="text-2xl font-bold text-muted-foreground">—</p>
                   </div>
                   <div className="flex-1 h-px bg-border relative">
-                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs text-muted-foreground">
-                      →
-                    </span>
+                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs text-muted-foreground">→</span>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Tailored ATS</p>
@@ -292,31 +364,108 @@ export default function ApplicationDetailClient() {
                 </CardContent>
               </Card>
             )}
-
-            {/* Application metadata */}
-            <Card>
-              <CardContent className="pt-4 pb-4 grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Status</p>
-                  <p className="font-medium">{statusLabel}</p>
-                </div>
-                {app.createdAt && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Found</p>
-                    <p className="font-medium">
-                      {new Date(app.createdAt).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </div>
+
         </div>
       </main>
+    </div>
+  );
+}
+
+/* ── Tailored CV renderer ── */
+function TailoredCVView({ cv }: { cv: TailoredCV }) {
+  return (
+    <div className="space-y-4 text-sm max-h-[60vh] overflow-y-auto pr-1">
+      {/* Header */}
+      <div className="pb-3 border-b">
+        <h3 className="text-base font-bold">{cv.name}</h3>
+        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-1">
+          {cv.email    && <span>{cv.email}</span>}
+          {cv.phone    && <span>{cv.phone}</span>}
+          {cv.location && <span>{cv.location}</span>}
+        </div>
+      </div>
+
+      {/* Summary */}
+      {cv.summary && (
+        <div>
+          <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Summary</h4>
+          <p className="leading-relaxed text-foreground">{cv.summary}</p>
+        </div>
+      )}
+
+      {/* Skills */}
+      {cv.skills && cv.skills.length > 0 && (
+        <div>
+          <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Skills</h4>
+          <div className="flex flex-wrap gap-1.5">
+            {cv.skills.map((s, i) => (
+              <span key={i} className="px-2 py-0.5 bg-muted rounded text-xs">{s}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Experience */}
+      {cv.experience && cv.experience.length > 0 && (
+        <div>
+          <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Experience</h4>
+          <div className="space-y-3">
+            {cv.experience.map((exp, i) => (
+              <div key={i}>
+                <div className="flex justify-between items-baseline">
+                  <span className="font-semibold">{exp.title}</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                    {exp.startDate}{exp.endDate ? ` – ${exp.endDate}` : ""}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-1">{exp.company}</p>
+                {exp.description && <p className="text-muted-foreground leading-relaxed">{exp.description}</p>}
+                {exp.highlights && exp.highlights.length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {exp.highlights.map((h, j) => (
+                      <li key={j} className="flex gap-1.5 text-muted-foreground">
+                        <span className="mt-1 shrink-0">•</span>
+                        <span>{h}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Education */}
+      {cv.education && cv.education.length > 0 && (
+        <div>
+          <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Education</h4>
+          <div className="space-y-1">
+            {cv.education.map((edu, i) => (
+              <div key={i}>
+                <span className="font-semibold">{edu.degree}</span>
+                {edu.field && <span className="text-muted-foreground"> · {edu.field}</span>}
+                <p className="text-xs text-muted-foreground">{edu.institution}{edu.year ? `, ${edu.year}` : ""}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Certifications */}
+      {cv.certifications && cv.certifications.length > 0 && (
+        <div>
+          <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Certifications</h4>
+          <ul className="space-y-0.5">
+            {cv.certifications.map((c, i) => (
+              <li key={i} className="flex gap-1.5 text-muted-foreground">
+                <span>•</span><span>{c}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

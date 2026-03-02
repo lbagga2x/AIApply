@@ -8,6 +8,7 @@ import json
 import os
 import boto3
 from decimal import Decimal
+from datetime import datetime, timezone
 
 dynamodb = boto3.resource("dynamodb")
 s3 = boto3.client("s3")
@@ -211,6 +212,54 @@ def handle_get_career_goals(event: dict) -> dict:
     return response(200, {"careerGoals": item.get("careerGoals", {})})
 
 
+def handle_approve_application(event: dict) -> dict:
+    """POST /api/applications/approve — Mark a reviewed application as submitted."""
+    user_id = get_user_id(event)
+    body = json.loads(event.get("body", "{}"))
+    application_id = body.get("applicationId")
+
+    if not application_id:
+        return response(400, {"error": "applicationId required"})
+
+    table = dynamodb.Table(APPLICATIONS_TABLE)
+    table.update_item(
+        Key={"userId": user_id, "applicationId": application_id},
+        UpdateExpression="SET #status = :s, submittedAt = :t",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={
+            ":s": "submitted",
+            ":t": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+    return response(200, {"message": "Application approved and marked as submitted"})
+
+
+def handle_get_tailored_cv(event: dict) -> dict:
+    """GET /api/applications/tailored-cv?applicationId=xxx — Fetch the tailored CV JSON from S3."""
+    user_id = get_user_id(event)
+    params = event.get("queryStringParameters") or {}
+    application_id = params.get("applicationId")
+
+    if not application_id:
+        return response(400, {"error": "applicationId required"})
+
+    # Look up application to get the S3 key (also verifies ownership via userId PK)
+    apps_table = dynamodb.Table(APPLICATIONS_TABLE)
+    item = apps_table.get_item(
+        Key={"userId": user_id, "applicationId": application_id}
+    ).get("Item", {})
+
+    tailored_cv_key = item.get("tailoredCvKey")
+    if not tailored_cv_key:
+        return response(404, {"error": "Tailored CV not ready yet"})
+
+    obj = s3.get_object(Bucket=CV_BUCKET, Key=tailored_cv_key)
+    cv_data = json.loads(obj["Body"].read().decode("utf-8"))
+
+    return response(200, {"tailoredCV": cv_data})
+
+
 def lambda_handler(event, context):
     """Main Lambda handler — routes requests based on path and method."""
     raw_path = event.get("rawPath", "")
@@ -225,6 +274,10 @@ def lambda_handler(event, context):
         return handle_get_profile(event)
     elif raw_path == "/api/applications" and method == "GET":
         return handle_get_applications(event)
+    elif raw_path == "/api/applications/approve" and method == "POST":
+        return handle_approve_application(event)
+    elif raw_path == "/api/applications/tailored-cv" and method == "GET":
+        return handle_get_tailored_cv(event)
     elif raw_path == "/api/upload-url" and method == "POST":
         return handle_get_upload_url(event)
     elif raw_path == "/api/career-goals" and method == "POST":

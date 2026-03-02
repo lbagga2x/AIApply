@@ -53,3 +53,14 @@ export async function getCareerGoals() {
 export async function getApplications() {
   return apiFetch("/api/applications");
 }
+
+export async function approveApplication(applicationId: string) {
+  return apiFetch("/api/applications/approve", {
+    method: "POST",
+    body: JSON.stringify({ applicationId }),
+  });
+}
+
+export async function getTailoredCV(applicationId: string) {
+  return apiFetch(`/api/applications/tailored-cv?applicationId=${encodeURIComponent(applicationId)}`);
+}
