@@ -64,3 +64,9 @@ export async function approveApplication(applicationId: string) {
 export async function getTailoredCV(applicationId: string) {
   return apiFetch(`/api/applications/tailored-cv?applicationId=${encodeURIComponent(applicationId)}`);
 }
+
+export async function deleteApplication(applicationId: string) {
+  return apiFetch(`/api/applications?applicationId=${encodeURIComponent(applicationId)}`, {
+    method: "DELETE",
+  });
+}

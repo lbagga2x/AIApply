@@ -238,6 +238,20 @@ def handle_get_career_goals(event: dict) -> dict:
     return response(200, {"careerGoals": item.get("careerGoals", {})})
 
 
+def handle_delete_application(event: dict) -> dict:
+    """DELETE /api/applications — Permanently delete an application record."""
+    user_id = get_user_id(event)
+    params = event.get("queryStringParameters") or {}
+    application_id = params.get("applicationId")
+
+    if not application_id:
+        return response(400, {"error": "applicationId required"})
+
+    table = dynamodb.Table(APPLICATIONS_TABLE)
+    table.delete_item(Key={"userId": user_id, "applicationId": application_id})
+    return response(200, {"message": "Application deleted"})
+
+
 def handle_approve_application(event: dict) -> dict:
     """POST /api/applications/approve — Mark a reviewed application as submitted."""
     user_id = get_user_id(event)
@@ -300,6 +314,8 @@ def lambda_handler(event, context):
         return handle_get_profile(event)
     elif raw_path == "/api/applications" and method == "GET":
         return handle_get_applications(event)
+    elif raw_path == "/api/applications" and method == "DELETE":
+        return handle_delete_application(event)
     elif raw_path == "/api/applications/approve" and method == "POST":
         return handle_approve_application(event)
     elif raw_path == "/api/applications/tailored-cv" and method == "GET":

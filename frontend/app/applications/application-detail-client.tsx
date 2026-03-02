@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { isAuthenticated } from "@/lib/auth";
-import { getApplications, approveApplication, getTailoredCV } from "@/lib/api";
+import { getApplications, approveApplication, getTailoredCV, deleteApplication } from "@/lib/api";
 
 interface Change {
   type: "added" | "modified" | "removed";
@@ -88,6 +88,7 @@ export default function ApplicationDetailClient() {
   const [cvLoading, setCvLoading] = useState(false);
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -135,6 +136,19 @@ export default function ApplicationDetailClient() {
       // non-fatal — CV tab just won't show
     } finally {
       setCvLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!app || deleting) return;
+    if (!confirm(`Remove this application for ${app.companyName || "this company"} from your pipeline?`)) return;
+    setDeleting(true);
+    try {
+      await deleteApplication(app.applicationId);
+      router.push("/dashboard");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not delete. Please try again.");
+      setDeleting(false);
     }
   }
 
@@ -251,6 +265,16 @@ export default function ApplicationDetailClient() {
                 {approving ? "Saving…" : isSubmitted ? "✓ CV Approved" : "✓ Approve CV"}
               </Button>
               <Button variant="ghost" onClick={() => router.push("/dashboard")}>← Back</Button>
+              {!isSubmitted && (
+                <Button
+                  variant="outline"
+                  className="text-muted-foreground hover:text-red-600 hover:border-red-300"
+                  disabled={deleting}
+                  onClick={handleDelete}
+                >
+                  {deleting ? "Removing…" : "Not Interested"}
+                </Button>
+              )}
             </div>
 
             {approveError && (

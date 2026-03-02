@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { isAuthenticated, signOut } from "@/lib/auth";
-import { getApplications } from "@/lib/api";
+import { getApplications, deleteApplication } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -66,6 +67,21 @@ export default function DashboardPage() {
       ? Math.round((apps.filter((a) => ["interview","offer","rejected"].includes(a.status)).length / apps.length) * 100)
       : 0,
   };
+
+  async function handleDismiss(e: React.MouseEvent, applicationId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("Remove this application from your pipeline?")) return;
+    setDismissingId(applicationId);
+    try {
+      await deleteApplication(applicationId);
+      setApps((prev) => prev.filter((a) => a.applicationId !== applicationId));
+    } catch {
+      alert("Could not delete application. Please try again.");
+    } finally {
+      setDismissingId(null);
+    }
+  }
 
   async function handleSignOut() {
     await signOut();
@@ -138,8 +154,17 @@ export default function DashboardPage() {
                       </div>
                       {colApps.map((app) => (
                         <Link key={app.applicationId} href={`/applications?id=${app.applicationId}`}>
-                          <div className="bg-white rounded-md p-2.5 border shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-                            <p className="text-xs font-semibold truncate">{app.companyName}</p>
+                          <div className="group relative bg-white rounded-md p-2.5 border shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+                            {/* Dismiss button */}
+                            <button
+                              onClick={(e) => handleDismiss(e, app.applicationId)}
+                              disabled={dismissingId === app.applicationId}
+                              className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity w-4 h-4 rounded-full bg-muted hover:bg-red-100 hover:text-red-600 flex items-center justify-center text-muted-foreground text-[10px] leading-none"
+                              title="Dismiss"
+                            >
+                              {dismissingId === app.applicationId ? "…" : "×"}
+                            </button>
+                            <p className="text-xs font-semibold truncate pr-4">{app.companyName}</p>
                             <p className="text-xs text-muted-foreground truncate">{app.jobTitle}</p>
                             {app.matchScore && (
                               <div className="flex gap-1 mt-1">
