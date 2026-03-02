@@ -5,8 +5,8 @@ import Link from "next/link";
 import { isAuthenticated, signOut } from "@/lib/auth";
 import { getApplications, deleteApplication, scanJobs } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Briefcase, MessageSquare, Award, TrendingUp } from "lucide-react";
 
 type AppStatus =
   | "pending" | "matched" | "matching" | "tailoring" | "review"
@@ -22,13 +22,55 @@ interface Application {
   createdAt?: string;
 }
 
-const STATUS_COLS: { key: AppStatus; label: string; colour: string }[] = [
-  { key: "matched",   label: "🎯 Matched",   colour: "bg-orange-50 border-orange-200" },
-  { key: "tailoring", label: "✏️ Tailoring",  colour: "bg-purple-50 border-purple-200" },
-  { key: "review",    label: "👁 Review",     colour: "bg-yellow-50 border-yellow-200" },
-  { key: "submitted", label: "📤 Submitted",  colour: "bg-gray-50 border-gray-200" },
-  { key: "interview", label: "🗓 Interview",  colour: "bg-green-50 border-green-200" },
-  { key: "offer",     label: "🎉 Offer",      colour: "bg-emerald-50 border-emerald-200" },
+const STATUS_COLS: {
+  key: AppStatus;
+  label: string;
+  emoji: string;
+  colour: string;
+  accent: string;
+}[] = [
+  {
+    key: "matched",
+    label: "Matched",
+    emoji: "🎯",
+    colour: "bg-amber-50/80 border-amber-200/80 dark:bg-amber-950/20 dark:border-amber-800/30",
+    accent: "bg-amber-400 dark:bg-amber-500",
+  },
+  {
+    key: "tailoring",
+    label: "Tailoring",
+    emoji: "✏️",
+    colour: "bg-violet-50/80 border-violet-200/80 dark:bg-violet-950/20 dark:border-violet-800/30",
+    accent: "bg-violet-400 dark:bg-violet-500",
+  },
+  {
+    key: "review",
+    label: "Review",
+    emoji: "👁",
+    colour: "bg-sky-50/80 border-sky-200/80 dark:bg-sky-950/20 dark:border-sky-800/30",
+    accent: "bg-sky-400 dark:bg-sky-500",
+  },
+  {
+    key: "submitted",
+    label: "Submitted",
+    emoji: "📤",
+    colour: "bg-slate-50/80 border-slate-200/80 dark:bg-slate-800/25 dark:border-slate-700/30",
+    accent: "bg-slate-400 dark:bg-slate-500",
+  },
+  {
+    key: "interview",
+    label: "Interview",
+    emoji: "🗓",
+    colour: "bg-emerald-50/80 border-emerald-200/80 dark:bg-emerald-950/20 dark:border-emerald-800/30",
+    accent: "bg-emerald-400 dark:bg-emerald-500",
+  },
+  {
+    key: "offer",
+    label: "Offer",
+    emoji: "🎉",
+    colour: "bg-green-50/80 border-green-200/80 dark:bg-green-950/20 dark:border-green-800/30",
+    accent: "bg-green-400 dark:bg-green-500",
+  },
 ];
 
 export default function DashboardPage() {
@@ -67,7 +109,12 @@ export default function DashboardPage() {
   if (!authChecked) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
+            <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
       </div>
     );
   }
@@ -116,65 +163,134 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Nav */}
-      <header className="border-b sticky top-0 bg-background/80 backdrop-blur z-10">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="font-bold text-lg">AIApply</span>
-          <nav className="flex items-center gap-4 text-sm">
-            <Link href="/dashboard" className="font-medium">Dashboard</Link>
-            <Link href="/settings" className="text-muted-foreground hover:text-foreground">Settings</Link>
-            <Button variant="outline" size="sm" onClick={handleSignOut}>Sign Out</Button>
+
+      {/* ── Nav ── */}
+      <header className="border-b border-border/60 sticky top-0 bg-background/80 backdrop-blur-xl z-10">
+        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+          {/* Logo */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shadow-sm">
+              <span className="text-primary-foreground text-[11px] font-bold tracking-tight">AI</span>
+            </div>
+            <span className="font-semibold text-[15px] tracking-tight">AIApply</span>
+          </div>
+
+          <nav className="flex items-center gap-1 text-sm">
+            <Link
+              href="/dashboard"
+              className="px-3 py-1.5 rounded-lg font-medium text-foreground bg-accent text-accent-foreground text-[13px]"
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/settings"
+              className="px-3 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors text-[13px]"
+            >
+              Settings
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSignOut}
+              className="ml-2 h-8 text-[13px] border-border/60"
+            >
+              Sign out
+            </Button>
           </nav>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
-        {/* API error banner */}
+      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+        {/* ── API error ── */}
         {apiError && (
-          <div className="text-sm px-4 py-2.5 rounded-lg border bg-red-50 border-red-200 text-red-700">
-            ⚠️ Could not load applications: <code className="font-mono text-xs">{apiError}</code>
+          <div className="text-sm px-4 py-3 rounded-xl border bg-destructive/5 border-destructive/20 text-destructive flex items-center gap-2">
+            <span className="text-base">⚠️</span>
+            <span>Could not load applications: <code className="font-mono text-xs opacity-80">{apiError}</code></span>
           </div>
         )}
 
-        {/* Stats bar */}
+        {/* ── Stats bar ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard label="Total Applications" value={stats.total} />
-          <StatCard label="Interviews" value={stats.interviews} />
-          <StatCard label="Offers" value={stats.offers} />
-          <StatCard label="Response Rate" value={`${stats.responseRate}%`} />
+          <StatCard label="Total" value={stats.total}       icon={Briefcase}     accent="bg-primary/10 text-primary" />
+          <StatCard label="Interviews" value={stats.interviews} icon={MessageSquare}  accent="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" />
+          <StatCard label="Offers"     value={stats.offers}     icon={Award}         accent="bg-amber-500/10 text-amber-600 dark:text-amber-400" />
+          <StatCard label="Response Rate" value={`${stats.responseRate}%`} icon={TrendingUp} accent="bg-violet-500/10 text-violet-600 dark:text-violet-400" />
         </div>
 
-        {/* Quick actions */}
-        <div className="space-y-2">
-          <div className="flex gap-3 flex-wrap">
-            <Button asChild>
-              <Link href="/onboarding">+ Upload New CV</Link>
+        {/* ── Actions ── */}
+        <div className="space-y-3">
+          <div className="flex gap-2.5 flex-wrap">
+            <Button asChild className="h-9 text-[13px] shadow-sm">
+              <Link href="/onboarding">
+                <span className="mr-1.5">+</span> Upload New CV
+              </Link>
             </Button>
-            <Button variant="outline" asChild>
+            <Button variant="outline" asChild className="h-9 text-[13px] border-border/60">
               <Link href="/settings">Edit Career Goals</Link>
             </Button>
-            <Button variant="outline" onClick={handleScan} disabled={scanning}>
-              {scanning ? "🔍 Scanning…" : "🔍 Scan for New Jobs"}
+            <Button
+              variant="outline"
+              onClick={handleScan}
+              disabled={scanning}
+              className="h-9 text-[13px] border-border/60"
+            >
+              {scanning ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  Scanning…
+                </span>
+              ) : (
+                "🔍 Scan for New Jobs"
+              )}
             </Button>
           </div>
           {scanDone && (
-            <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2 w-fit">
-              ✓ Scan started — new matches will appear in the Matched column in a few minutes.
-            </p>
+            <div className="text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl px-4 py-2.5 w-fit flex items-center gap-2">
+              <span>✓</span>
+              <span>Scan started — new matches will appear in the Matched column in a few minutes.</span>
+            </div>
           )}
         </div>
 
-        {/* Kanban board */}
+        {/* ── Pipeline ── */}
         <div>
-          <h2 className="text-lg font-semibold mb-4">Application Pipeline</h2>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-base font-semibold tracking-tight">Application Pipeline</h2>
+            {!loading && apps.length > 0 && (
+              <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
+                {apps.length} application{apps.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+
           {loading ? (
-            <p className="text-muted-foreground text-sm">Loading applications…</p>
+            <div className="flex gap-3 overflow-x-auto pb-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex-none w-56 h-48 rounded-2xl bg-muted/50 animate-pulse" />
+              ))}
+            </div>
           ) : apps.length === 0 && !apiError ? (
-            <div className="text-center py-16 text-muted-foreground border rounded-lg bg-muted/20">
-              <p className="text-4xl mb-3">🚀</p>
-              <p className="font-medium mb-1">Your pipeline is empty</p>
-              <p className="text-sm">Jobs will appear here once the AI has found and scored matches for you.</p>
-              <p className="text-sm mt-1">This usually takes a few minutes after you save your career goals.</p>
+            <div className="text-center py-20 border border-dashed border-border/60 rounded-2xl bg-muted/20">
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <Briefcase className="w-7 h-7 text-primary/60" />
+              </div>
+              <p className="font-semibold text-foreground mb-1">Pipeline is empty</p>
+              <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                Jobs will appear here once the AI finds and scores matches for you.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Usually takes a few minutes after saving career goals.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-5 text-[13px]"
+                onClick={handleScan}
+                disabled={scanning}
+              >
+                🔍 Scan for New Jobs
+              </Button>
             </div>
           ) : (
             <div className="flex gap-3 overflow-x-auto pb-4">
@@ -182,37 +298,69 @@ export default function DashboardPage() {
                 const colApps = apps.filter((a) => a.status === col.key);
                 return (
                   <div key={col.key} className="flex-none w-56">
-                    <div className={`rounded-lg border p-3 space-y-2 min-h-40 ${col.colour}`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold">{col.label}</span>
-                        <Badge variant="secondary" className="text-xs">{colApps.length}</Badge>
+                    {/* Column */}
+                    <div className={`rounded-2xl border p-3 space-y-2 min-h-44 ${col.colour}`}>
+                      {/* Column header */}
+                      <div className="flex items-center justify-between px-0.5 mb-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm leading-none">{col.emoji}</span>
+                          <span className="text-[11px] font-semibold tracking-wide uppercase text-foreground/70">
+                            {col.label}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-semibold text-muted-foreground bg-background/60 dark:bg-background/30 px-2 py-0.5 rounded-full tabular-nums">
+                          {colApps.length}
+                        </span>
                       </div>
+
+                      {/* Cards */}
                       {colApps.map((app) => (
                         <Link key={app.applicationId} href={`/applications?id=${app.applicationId}`}>
-                          <div className="group relative bg-white rounded-md p-2.5 border shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-                            {/* Dismiss button */}
+                          <div className="group relative rounded-xl bg-card border border-border/50 p-3 shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150 cursor-pointer overflow-hidden">
+
+                            {/* Left accent stripe */}
+                            <div className={`absolute inset-y-0 left-0 w-[3px] ${col.accent}`} />
+
+                            {/* Dismiss */}
                             <button
                               onClick={(e) => handleDismiss(e, app.applicationId)}
                               disabled={dismissingId === app.applicationId}
-                              className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity w-4 h-4 rounded-full bg-muted hover:bg-red-100 hover:text-red-600 flex items-center justify-center text-muted-foreground text-[10px] leading-none"
+                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 rounded-full bg-muted hover:bg-destructive/10 hover:text-destructive flex items-center justify-center text-muted-foreground text-xs"
                               title="Dismiss"
                             >
                               {dismissingId === app.applicationId ? "…" : "×"}
                             </button>
-                            <p className="text-xs font-semibold truncate pr-4">{app.companyName}</p>
-                            <p className="text-xs text-muted-foreground truncate">{app.jobTitle}</p>
-                            {app.matchScore && (
-                              <div className="flex gap-1 mt-1">
-                                <Badge variant="outline" className="text-[10px] px-1 py-0">
-                                  {app.matchScore}% match
-                                </Badge>
-                              </div>
-                            )}
+
+                            <div className="pl-2 pr-4">
+                              <p className="text-[13px] font-semibold truncate text-foreground leading-tight">
+                                {app.companyName || "—"}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                                {app.jobTitle || "—"}
+                              </p>
+
+                              {app.matchScore != null && Number(app.matchScore) > 0 && (
+                                <div className="mt-2.5 flex items-center gap-2">
+                                  <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-primary/60"
+                                      style={{ width: `${Number(app.matchScore)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+                                    {app.matchScore}%
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </Link>
                       ))}
+
                       {colApps.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center pt-4">Empty</p>
+                        <div className="flex items-center justify-center py-6">
+                          <p className="text-[11px] text-muted-foreground/50">Empty</p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -221,19 +369,38 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
       </main>
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+/* ── Stat Card ───────────────────────────────────────────────── */
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ElementType;
+  accent: string;
+}) {
   return (
-    <Card>
-      <CardHeader className="pb-1 pt-4 px-4">
-        <CardTitle className="text-xs text-muted-foreground font-normal">{label}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-4">
-        <p className="text-2xl font-bold">{value}</p>
+    <Card className="shadow-sm border-border/60">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider truncate">
+              {label}
+            </p>
+            <p className="text-2xl font-bold mt-1.5 text-foreground tabular-nums">{value}</p>
+          </div>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${accent}`}>
+            <Icon className="w-5 h-5" />
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
