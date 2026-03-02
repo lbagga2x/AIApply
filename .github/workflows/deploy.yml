@@ -43,6 +43,22 @@ jobs:
       - name: Sync to S3
         run: aws s3 sync frontend/out/ s3://${{ vars.FRONTEND_BUCKET }} --delete
 
+      - name: Upload routes without .html extension (clean URL routing)
+        # Next.js static export creates dashboard.html, login.html, etc.
+        # CloudFront requests /dashboard from S3 → 404 (no such key) → falls back to index.html (landing page).
+        # Fix: also upload each route as an extensionless object with explicit text/html content-type
+        # so CloudFront finds and serves the correct page on direct navigation / refresh.
+        run: |
+          for htmlfile in frontend/out/*.html; do
+            filename=$(basename "$htmlfile" .html)
+            if [ "$filename" != "index" ]; then
+              aws s3 cp "$htmlfile" \
+                "s3://${{ vars.FRONTEND_BUCKET }}/$filename" \
+                --content-type "text/html" \
+                --cache-control "no-cache, no-store, must-revalidate"
+            fi
+          done
+
       - name: Invalidate CloudFront
         run: aws cloudfront create-invalidation --distribution-id ${{ vars.CLOUDFRONT_DIST_ID }} --paths "/*"
 

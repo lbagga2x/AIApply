@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { isAuthenticated, signOut } from "@/lib/auth";
-import { getApplications, deleteApplication, scanJobs } from "@/lib/api";
+import { getApplications, deleteApplication, scanJobs, getCareerGoals } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Briefcase, MessageSquare, Award, TrendingUp } from "lucide-react";
@@ -73,6 +73,17 @@ const STATUS_COLS: {
   },
 ];
 
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [apps, setApps] = useState<Application[]>([]);
@@ -81,6 +92,7 @@ export default function DashboardPage() {
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanDone, setScanDone] = useState(false);
+  const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
@@ -92,14 +104,18 @@ export default function DashboardPage() {
       if (!ok) { router.push("/login"); return; }
       setAuthChecked(true);
 
-      getApplications()
-        .then((data) => {
-          if (mounted && data.applications?.length > 0) setApps(data.applications);
-        })
-        .catch((err: unknown) => {
+      // Fetch applications and last-scanned time in parallel
+      Promise.all([
+        getApplications().catch((err: unknown) => {
           if (mounted) setApiError(err instanceof Error ? err.message : "API unavailable");
-        })
-        .finally(() => { if (mounted) setLoading(false); });
+          return null;
+        }),
+        getCareerGoals().catch(() => null),
+      ]).then(([appsData, goalsData]) => {
+        if (!mounted) return;
+        if (appsData?.applications?.length > 0) setApps(appsData.applications);
+        if (goalsData?.lastScannedAt) setLastScannedAt(goalsData.lastScannedAt);
+      }).finally(() => { if (mounted) setLoading(false); });
     }
 
     init();
@@ -149,6 +165,7 @@ export default function DashboardPage() {
     try {
       await scanJobs();
       setScanDone(true);
+      setLastScannedAt(new Date().toISOString());
     } catch (err) {
       alert(err instanceof Error ? err.message : "Scan failed. Please try again.");
     } finally {
@@ -220,7 +237,7 @@ export default function DashboardPage() {
 
         {/* ── Actions ── */}
         <div className="space-y-3">
-          <div className="flex gap-2.5 flex-wrap">
+          <div className="flex gap-2.5 flex-wrap items-center">
             <Button asChild className="h-9 text-[13px] shadow-sm">
               <Link href="/onboarding">
                 <span className="mr-1.5">+</span> Upload New CV
@@ -244,6 +261,12 @@ export default function DashboardPage() {
                 "🔍 Scan for New Jobs"
               )}
             </Button>
+            {/* Last scanned badge */}
+            {lastScannedAt && !scanning && (
+              <span className="text-[12px] text-muted-foreground">
+                Last scanned <span className="font-medium text-foreground">{formatRelativeTime(lastScannedAt)}</span>
+              </span>
+            )}
           </div>
           {scanDone && (
             <div className="text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl px-4 py-2.5 w-fit flex items-center gap-2">
