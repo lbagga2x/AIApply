@@ -245,7 +245,48 @@ def handle_get_career_goals(event: dict) -> dict:
     result = table.get_item(Key={"userId": user_id})
     item = result.get("Item", {})
 
-    return response(200, {"careerGoals": item.get("careerGoals", {})})
+    return response(200, {
+        "careerGoals": item.get("careerGoals", {}),
+        "lastScannedAt": item.get("lastScannedAt"),
+    })
+
+
+def handle_scan_jobs(event: dict) -> dict:
+    """POST /api/jobs/scan — Trigger job scout for the current user."""
+    user_id = get_user_id(event)
+
+    # Verify career goals exist
+    users_table = dynamodb.Table(USERS_TABLE)
+    user = users_table.get_item(Key={"userId": user_id}).get("Item", {})
+    if not user.get("careerGoals"):
+        return response(400, {"error": "Please set career goals first"})
+
+    # Get primary CV
+    cvs_table = dynamodb.Table(CVS_TABLE)
+    result = cvs_table.query(
+        KeyConditionExpression="userId = :uid",
+        ExpressionAttributeValues={":uid": user_id},
+        Limit=1,
+    )
+    items = result.get("Items", [])
+    if not items:
+        return response(400, {"error": "Please upload a CV first"})
+
+    cv_id = items[0]["cvId"]
+
+    # Record scan time
+    users_table.update_item(
+        Key={"userId": user_id},
+        UpdateExpression="SET lastScannedAt = :t",
+        ExpressionAttributeValues={":t": datetime.now(timezone.utc).isoformat()},
+    )
+
+    # Trigger job scout
+    sqs.send_message(
+        QueueUrl=get_job_scout_queue_url(),
+        MessageBody=json.dumps({"userId": user_id, "cvId": cv_id}),
+    )
+    return response(200, {"message": "Job scan started"})
 
 
 def handle_tailor_application(event: dict) -> dict:
@@ -377,6 +418,8 @@ def lambda_handler(event, context):
         return handle_save_career_goals(event)
     elif raw_path == "/api/career-goals" and method == "GET":
         return handle_get_career_goals(event)
+    elif raw_path == "/api/jobs/scan" and method == "POST":
+        return handle_scan_jobs(event)
     elif raw_path == "/api/health":
         return response(200, {"status": "healthy", "environment": ENVIRONMENT})
     else:

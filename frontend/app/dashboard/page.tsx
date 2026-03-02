@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { isAuthenticated, signOut } from "@/lib/auth";
-import { getApplications, deleteApplication } from "@/lib/api";
+import { getApplications, deleteApplication, scanJobs } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
   const [dismissingId, setDismissingId] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanDone, setScanDone] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -83,6 +85,19 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleScan() {
+    setScanning(true);
+    setScanDone(false);
+    try {
+      await scanJobs();
+      setScanDone(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Scan failed. Please try again.");
+    } finally {
+      setScanning(false);
+    }
+  }
+
   async function handleSignOut() {
     await signOut();
     router.push("/");
@@ -120,13 +135,23 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick actions */}
-        <div className="flex gap-3">
-          <Button asChild>
-            <Link href="/onboarding">+ Upload New CV</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/settings">Edit Career Goals</Link>
-          </Button>
+        <div className="space-y-2">
+          <div className="flex gap-3 flex-wrap">
+            <Button asChild>
+              <Link href="/onboarding">+ Upload New CV</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/settings">Edit Career Goals</Link>
+            </Button>
+            <Button variant="outline" onClick={handleScan} disabled={scanning}>
+              {scanning ? "🔍 Scanning…" : "🔍 Scan for New Jobs"}
+            </Button>
+          </div>
+          {scanDone && (
+            <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2 w-fit">
+              ✓ Scan started — new matches will appear in the Matched column in a few minutes.
+            </p>
+          )}
         </div>
 
         {/* Kanban board */}

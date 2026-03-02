@@ -77,3 +77,7 @@ export async function tailorApplication(applicationId: string) {
     body: JSON.stringify({ applicationId }),
   });
 }
+
+export async function scanJobs() {
+  return apiFetch("/api/jobs/scan", { method: "POST" });
+}

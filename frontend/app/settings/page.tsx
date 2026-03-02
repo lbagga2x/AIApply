@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { isAuthenticated } from "@/lib/auth";
-import { getCareerGoals, saveCareerGoals } from "@/lib/api";
+import { getCareerGoals, saveCareerGoals, scanJobs } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,17 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
 const WORK_ARRANGEMENTS = ["Remote", "Hybrid", "On-site"];
+
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -23,6 +34,9 @@ export default function SettingsPage() {
   const [autoApply, setAutoApply] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanDone, setScanDone] = useState(false);
+  const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
 
   useEffect(() => {
     isAuthenticated().then((ok) => { if (!ok) router.push("/login"); });
@@ -33,8 +47,23 @@ export default function SettingsPage() {
       setMaxSalary(g.maxSalary ?? "");
       setLocations((g.locations ?? []).join(", "));
       setArrangement(g.workArrangement ?? ["Remote"]);
+      setLastScannedAt(data.lastScannedAt ?? null);
     }).catch(() => {});
   }, [router]);
+
+  async function handleScan() {
+    setScanning(true);
+    setScanDone(false);
+    try {
+      await scanJobs();
+      setScanDone(true);
+      setLastScannedAt(new Date().toISOString());
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Scan failed. Please try again.");
+    } finally {
+      setScanning(false);
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -106,6 +135,37 @@ export default function SettingsPage() {
                 {saved ? "✓ Saved!" : saving ? "Saving…" : "Save Changes"}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        {/* Job Scout */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Job Scout</CardTitle>
+            <CardDescription>
+              Scan LinkedIn &amp; Indeed for new jobs matching your career goals
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm text-muted-foreground">
+                {lastScannedAt
+                  ? `Last scanned: ${formatRelativeTime(lastScannedAt)}`
+                  : "Never scanned — run a scan after saving your career goals"}
+              </div>
+              <Button onClick={handleScan} disabled={scanning} variant="outline" className="shrink-0">
+                {scanning ? "🔍 Scanning…" : "🔍 Scan for New Jobs Now"}
+              </Button>
+            </div>
+            {scanDone && (
+              <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                ✓ Scan started — new matches will appear in your dashboard in a few minutes.
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Each scan costs ~$0.07 in AI credits (Haiku model scores 30 jobs).
+              Run it daily for fresh results.
+            </p>
           </CardContent>
         </Card>
 
