@@ -24,7 +24,6 @@ interface Application {
 
 const STATUS_COLS: { key: AppStatus; label: string; colour: string }[] = [
   { key: "matched",   label: "🎯 Matched",   colour: "bg-orange-50 border-orange-200" },
-  { key: "matching",  label: "🔍 Matching",  colour: "bg-blue-50 border-blue-200" },
   { key: "tailoring", label: "✏️ Tailoring",  colour: "bg-purple-50 border-purple-200" },
   { key: "review",    label: "👁 Review",     colour: "bg-yellow-50 border-yellow-200" },
   { key: "submitted", label: "📤 Submitted",  colour: "bg-gray-50 border-gray-200" },
