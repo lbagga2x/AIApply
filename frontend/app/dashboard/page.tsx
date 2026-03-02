@@ -39,27 +39,38 @@ export default function DashboardPage() {
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanDone, setScanDone] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
-    isAuthenticated().then((ok) => {
-      if (!ok && mounted) router.push("/login");
-    });
+    async function init() {
+      const ok = await isAuthenticated();
+      if (!mounted) return;
+      if (!ok) { router.push("/login"); return; }
+      setAuthChecked(true);
 
-    getApplications()
-      .then((data) => {
-        if (mounted && data.applications?.length > 0) {
-          setApps(data.applications);
-        }
-      })
-      .catch((err: unknown) => {
-        if (mounted) setApiError(err instanceof Error ? err.message : "API unavailable");
-      })
-      .finally(() => { if (mounted) setLoading(false); });
+      getApplications()
+        .then((data) => {
+          if (mounted && data.applications?.length > 0) setApps(data.applications);
+        })
+        .catch((err: unknown) => {
+          if (mounted) setApiError(err instanceof Error ? err.message : "API unavailable");
+        })
+        .finally(() => { if (mounted) setLoading(false); });
+    }
 
+    init();
     return () => { mounted = false; };
   }, [router]);
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      </div>
+    );
+  }
 
   const stats = {
     total: apps.length,
@@ -111,7 +122,6 @@ export default function DashboardPage() {
           <span className="font-bold text-lg">AIApply</span>
           <nav className="flex items-center gap-4 text-sm">
             <Link href="/dashboard" className="font-medium">Dashboard</Link>
-            <Link href="/applications" className="text-muted-foreground hover:text-foreground">Applications</Link>
             <Link href="/settings" className="text-muted-foreground hover:text-foreground">Settings</Link>
             <Button variant="outline" size="sm" onClick={handleSignOut}>Sign Out</Button>
           </nav>
