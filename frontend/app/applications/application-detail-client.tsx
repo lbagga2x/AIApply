@@ -56,6 +56,7 @@ interface ApplicationDetail {
   tailoredCvKey?: string;
   atsScore?: string | number;
   coverLetter?: string;
+  jobUrl?: string;
   createdAt?: string;
 }
 
@@ -247,7 +248,7 @@ export default function ApplicationDetailClient() {
                 disabled={!canApprove || approving}
                 onClick={handleApprove}
               >
-                {approving ? "Submitting…" : isSubmitted ? "✓ Submitted" : "✓ Approve & Submit"}
+                {approving ? "Saving…" : isSubmitted ? "✓ CV Approved" : "✓ Approve CV"}
               </Button>
               <Button variant="ghost" onClick={() => router.push("/dashboard")}>← Back</Button>
             </div>
@@ -256,17 +257,32 @@ export default function ApplicationDetailClient() {
               <p className="text-xs text-red-600 text-center">{approveError}</p>
             )}
 
+            {/* After approving: show the Apply link */}
+            {isSubmitted && (
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 space-y-2">
+                <p className="text-sm font-medium text-green-800">✓ CV approved — now apply manually</p>
+                <p className="text-xs text-green-700">
+                  Auto-submit is coming in a future update. For now, copy your tailored CV from
+                  the &quot;Tailored CV&quot; tab and apply directly on the company&apos;s site.
+                </p>
+                {app.jobUrl && (
+                  <a
+                    href={app.jobUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-green-900 underline underline-offset-2 hover:text-green-700"
+                  >
+                    Apply at {app.companyName} ↗
+                  </a>
+                )}
+              </div>
+            )}
+
             {!canApprove && !isSubmitted && (
               <p className="text-xs text-muted-foreground text-center">
                 {app.status === "tailoring"
                   ? "✏️ AI is tailoring your CV — usually takes 1–2 minutes. Refresh to check."
                   : "Button unlocks once the CV has been tailored and is ready for review."}
-              </p>
-            )}
-
-            {isSubmitted && (
-              <p className="text-xs text-green-600 text-center font-medium">
-                ✓ Application approved and marked as submitted
               </p>
             )}
 

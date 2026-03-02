@@ -106,7 +106,7 @@ def handle_get_profile(event: dict) -> dict:
 
 
 def handle_get_applications(event: dict) -> dict:
-    """GET /api/applications — Get all applications for the user."""
+    """GET /api/applications — Get all applications for the user, enriched with job URLs."""
     user_id = get_user_id(event)
     table = dynamodb.Table(APPLICATIONS_TABLE)
 
@@ -116,7 +116,32 @@ def handle_get_applications(event: dict) -> dict:
         ScanIndexForward=False,  # newest first
     )
 
-    return response(200, {"applications": result.get("Items", [])})
+    applications = result.get("Items", [])
+
+    # Enrich with jobUrl from the job-listings table (for applications that
+    # don't already have jobUrl embedded on the record).
+    needs_url = [a for a in applications if a.get("jobId") and not a.get("jobUrl")]
+    if needs_url:
+        job_ids = list({a["jobId"] for a in needs_url})
+        # batch_get_item — max 100 keys per call, well within our limit
+        batch_result = dynamodb.batch_get_item(
+            RequestItems={
+                JOBS_TABLE: {
+                    "Keys": [{"jobId": jid} for jid in job_ids[:100]],
+                    "ProjectionExpression": "jobId, #u",
+                    "ExpressionAttributeNames": {"#u": "url"},
+                }
+            }
+        )
+        job_urls = {
+            item["jobId"]: item.get("url", "")
+            for item in batch_result.get("Responses", {}).get(JOBS_TABLE, [])
+        }
+        for app in applications:
+            if app.get("jobId") and app["jobId"] in job_urls:
+                app["jobUrl"] = job_urls[app["jobId"]]
+
+    return response(200, {"applications": applications})
 
 
 def handle_get_upload_url(event: dict) -> dict:

@@ -232,6 +232,7 @@ def lambda_handler(event, context):
                     "matchScore": str(job["matchScore"]),
                     "careerAlignmentScore": str(job["careerAlignmentScore"]),
                     "matchReason": job["matchReason"],
+                    "jobUrl": job.get("url", ""),   # embed URL so API doesn't need a join
                     "createdAt": datetime.now(timezone.utc).isoformat(),
                 })
 
