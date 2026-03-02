@@ -299,7 +299,7 @@ export default function DashboardPage() {
                 return (
                   <div key={col.key} className="flex-none w-56">
                     {/* Column */}
-                    <div className={`rounded-2xl border p-3 space-y-3 min-h-44 ${col.colour}`}>
+                    <div className={`rounded-2xl border p-3 flex flex-col gap-3 min-h-44 ${col.colour}`}>
                       {/* Column header */}
                       <div className="flex items-center justify-between px-0.5 mb-3">
                         <div className="flex items-center gap-1.5">
@@ -316,7 +316,7 @@ export default function DashboardPage() {
                       {/* Cards */}
                       {colApps.map((app) => (
                         <Link key={app.applicationId} href={`/applications?id=${app.applicationId}`}>
-                          <div className="group relative rounded-xl bg-card border border-border/50 dark:border-white/[0.10] p-3 shadow-sm dark:shadow-[0_2px_8px_rgba(0,0,0,0.5)] hover:shadow-md hover:-translate-y-px transition-all duration-150 cursor-pointer overflow-hidden">
+                          <div className="group relative rounded-xl bg-card border border-border/50 dark:border-white/[0.15] p-3 shadow-sm dark:shadow-[0_2px_12px_rgba(0,0,0,0.6)] hover:shadow-md hover:-translate-y-px transition-all duration-150 cursor-pointer overflow-hidden">
 
                             {/* Left accent stripe */}
                             <div className={`absolute inset-y-0 left-0 w-[3px] ${col.accent}`} />

@@ -100,7 +100,7 @@
   /* Surfaces — deep navy, not just dark gray */
   --background:          oklch(0.11 0.014 265);
   --foreground:          oklch(0.96 0.006 265);
-  --card:                oklch(0.21 0.018 265);
+  --card:                oklch(0.27 0.022 265);
   --card-foreground:     oklch(0.96 0.006 265);
   --popover:             oklch(0.21 0.018 265);
   --popover-foreground:  oklch(0.96 0.006 265);
