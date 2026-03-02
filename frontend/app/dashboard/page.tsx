@@ -137,7 +137,7 @@ export default function DashboardPage() {
                         <Badge variant="secondary" className="text-xs">{colApps.length}</Badge>
                       </div>
                       {colApps.map((app) => (
-                        <Link key={app.applicationId} href={`/applications/${app.applicationId}`}>
+                        <Link key={app.applicationId} href={`/applications?id=${app.applicationId}`}>
                           <div className="bg-white rounded-md p-2.5 border shadow-sm hover:shadow-md transition-shadow cursor-pointer">
                             <p className="text-xs font-semibold truncate">{app.companyName}</p>
                             <p className="text-xs text-muted-foreground truncate">{app.jobTitle}</p>
