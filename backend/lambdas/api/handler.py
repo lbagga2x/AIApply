@@ -6,6 +6,7 @@ Routes requests to appropriate handlers for CRUD operations.
 import base64
 import json
 import os
+import uuid
 import boto3
 from decimal import Decimal
 from datetime import datetime, timezone
@@ -435,6 +436,47 @@ def handle_update_application_status(event: dict) -> dict:
     return response(200, {"message": "Status updated", "status": new_status, "updatedAt": now})
 
 
+def handle_create_manual_application(event: dict) -> dict:
+    """POST /api/applications/manual — Create an application the user found/applied to manually."""
+    user_id = get_user_id(event)
+    body = json.loads(event.get("body", "{}"))
+
+    company_name = (body.get("companyName") or "").strip()
+    job_title = (body.get("jobTitle") or "").strip()
+    job_url = (body.get("jobUrl") or "").strip()
+    status = body.get("status") or "submitted"
+
+    if not company_name and not job_title:
+        return response(400, {"error": "companyName or jobTitle required"})
+
+    allowed_statuses = {"review", "submitted", "interview", "offer", "rejected"}
+    if status not in allowed_statuses:
+        return response(400, {"error": f"Invalid status: {status}"})
+
+    now = datetime.now(timezone.utc).isoformat()
+    application_id = str(uuid.uuid4())
+
+    item = {
+        "userId": user_id,
+        "applicationId": application_id,
+        "status": status,
+        "companyName": company_name or None,
+        "jobTitle": job_title or None,
+        "jobUrl": job_url or None,
+        "source": "manual",
+        "createdAt": now,
+        "updatedAt": now,
+    }
+
+    # Remove None values (keeps DynamoDB item clean)
+    item = {k: v for k, v in item.items() if v is not None}
+
+    table = dynamodb.Table(APPLICATIONS_TABLE)
+    table.put_item(Item=item)
+
+    return response(200, {"message": "Manual application created", "application": item})
+
+
 def handle_delete_account(event: dict) -> dict:
     """DELETE /api/account — Permanently erase every record and file for this user."""
     user_id = get_user_id(event)
@@ -542,6 +584,8 @@ def lambda_handler(event, context):
         return handle_approve_application(event)
     elif raw_path == "/api/applications/status" and method == "PUT":
         return handle_update_application_status(event)
+    elif raw_path == "/api/applications/manual" and method == "POST":
+        return handle_create_manual_application(event)
     elif raw_path == "/api/applications/tailored-cv" and method == "GET":
         return handle_get_tailored_cv(event)
     elif raw_path == "/api/upload-url" and method == "POST":

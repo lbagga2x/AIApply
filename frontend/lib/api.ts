@@ -85,6 +85,18 @@ export async function updateApplicationStatus(applicationId: string, status: str
   });
 }
 
+export async function createManualApplication(input: {
+  companyName?: string;
+  jobTitle?: string;
+  jobUrl?: string;
+  status?: "review" | "submitted" | "interview" | "offer" | "rejected";
+}) {
+  return apiFetch("/api/applications/manual", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function scanJobs() {
   return apiFetch("/api/jobs/scan", { method: "POST" });
 }

@@ -3,9 +3,20 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { isAuthenticated, signOut } from "@/lib/auth";
-import { getApplications, deleteApplication, scanJobs, getCareerGoals } from "@/lib/api";
+import { getApplications, deleteApplication, scanJobs, getCareerGoals, createManualApplication } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Briefcase, MessageSquare, Award, TrendingUp } from "lucide-react";
 
 type AppStatus =
@@ -21,6 +32,14 @@ interface Application {
   careerAlignmentScore?: number;
   createdAt?: string;
 }
+
+const MANUAL_STATUS_OPTIONS: { key: AppStatus; label: string }[] = [
+  { key: "review", label: "Review" },
+  { key: "submitted", label: "Submitted" },
+  { key: "interview", label: "Interview" },
+  { key: "offer", label: "Offer" },
+  { key: "rejected", label: "Rejected" },
+];
 
 const STATUS_COLS: {
   key: AppStatus;
@@ -101,6 +120,13 @@ export default function DashboardPage() {
   const [scanDone, setScanDone] = useState(false);
   const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualError, setManualError] = useState("");
+  const [manualCompany, setManualCompany] = useState("");
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualUrl, setManualUrl] = useState("");
+  const [manualStatus, setManualStatus] = useState<AppStatus>("submitted");
 
   useEffect(() => {
     let mounted = true;
@@ -180,6 +206,47 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleCreateManual() {
+    if (manualSaving) return;
+    if (!manualCompany.trim() && !manualTitle.trim()) {
+      setManualError("Please enter at least a company name or a job title.");
+      return;
+    }
+    setManualSaving(true);
+    setManualError("");
+    try {
+      const status =
+        (["review", "submitted", "interview", "offer", "rejected"].includes(manualStatus)
+          ? manualStatus
+          : "submitted") as "review" | "submitted" | "interview" | "offer" | "rejected";
+
+      const res = await createManualApplication({
+        companyName: manualCompany.trim(),
+        jobTitle: manualTitle.trim(),
+        jobUrl: manualUrl.trim(),
+        status,
+      });
+
+      const created: Application | undefined = res?.application;
+      if (created) {
+        setApps((prev) => [created, ...prev]);
+      } else {
+        const data = await getApplications();
+        setApps(data.applications || []);
+      }
+
+      setManualCompany("");
+      setManualTitle("");
+      setManualUrl("");
+      setManualStatus("submitted");
+      setManualOpen(false);
+    } catch (err) {
+      setManualError(err instanceof Error ? err.message : "Could not save manual application.");
+    } finally {
+      setManualSaving(false);
+    }
+  }
+
   async function handleSignOut() {
     await signOut();
     router.push("/");
@@ -250,6 +317,86 @@ export default function DashboardPage() {
                 <span className="mr-1.5">+</span> Upload New CV
               </Link>
             </Button>
+            <Dialog open={manualOpen} onOpenChange={setManualOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="h-9 text-[13px] border-border/60">
+                  ➕ Add manual application
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add manual application</DialogTitle>
+                  <DialogDescription>
+                    Track a job you found or applied to outside AIApply.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="manual-company">Company</Label>
+                    <Input
+                      id="manual-company"
+                      value={manualCompany}
+                      onChange={(e) => setManualCompany(e.target.value)}
+                      placeholder="e.g. Stripe"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="manual-title">Job title</Label>
+                    <Input
+                      id="manual-title"
+                      value={manualTitle}
+                      onChange={(e) => setManualTitle(e.target.value)}
+                      placeholder="e.g. Software Engineer"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="manual-url">Job link (optional)</Label>
+                    <Input
+                      id="manual-url"
+                      value={manualUrl}
+                      onChange={(e) => setManualUrl(e.target.value)}
+                      placeholder="https://…"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {MANUAL_STATUS_OPTIONS.map((opt) => (
+                        <Button
+                          key={opt.key}
+                          type="button"
+                          size="sm"
+                          variant={manualStatus === opt.key ? "default" : "outline"}
+                          onClick={() => setManualStatus(opt.key)}
+                          className="h-8 text-[12px]"
+                        >
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {manualError && (
+                    <div className="text-sm px-3 py-2 rounded-lg border bg-destructive/5 border-destructive/20 text-destructive">
+                      {manualError}
+                    </div>
+                  )}
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setManualOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateManual} disabled={manualSaving}>
+                    {manualSaving ? "Saving…" : "Add to pipeline"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <Button variant="outline" asChild className="h-9 text-[13px] border-border/60">
               <Link href="/settings">Edit Career Goals</Link>
             </Button>
