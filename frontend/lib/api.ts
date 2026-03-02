@@ -50,8 +50,8 @@ export async function getCareerGoals() {
 }
 
 // --- Applications ---
-export async function getApplications() {
-  return apiFetch("/api/applications");
+export async function getApplications(limit = 100) {
+  return apiFetch(`/api/applications?limit=${limit}`);
 }
 
 export async function approveApplication(applicationId: string) {

@@ -108,43 +108,72 @@ def handle_get_profile(event: dict) -> dict:
 
 
 def handle_get_applications(event: dict) -> dict:
-    """GET /api/applications — Get all applications for the user, enriched with job URLs."""
+    """GET /api/applications — Get applications for the user (paginated)."""
     user_id = get_user_id(event)
-    table = dynamodb.Table(APPLICATIONS_TABLE)
+    params = event.get("queryStringParameters") or {}
 
-    result = table.query(
+    # Pagination: limit (default 100, max 200) + cursor
+    try:
+        limit = min(int(params.get("limit", 100)), 200)
+    except (ValueError, TypeError):
+        limit = 100
+
+    last_key_raw = params.get("lastKey")
+    exclusive_start = (
+        {"userId": user_id, "applicationId": last_key_raw} if last_key_raw else None
+    )
+
+    table = dynamodb.Table(APPLICATIONS_TABLE)
+    query_kwargs: dict = dict(
         KeyConditionExpression="userId = :uid",
         ExpressionAttributeValues={":uid": user_id},
         ScanIndexForward=False,  # newest first
+        Limit=limit,
     )
+    if exclusive_start:
+        query_kwargs["ExclusiveStartKey"] = exclusive_start
 
+    result = table.query(**query_kwargs)
     applications = result.get("Items", [])
 
-    # Enrich with jobUrl from the job-listings table (for applications that
-    # don't already have jobUrl embedded on the record).
-    # Use individual GetItem calls — the Lambda role has GetItem but not
-    # BatchGetItem, and we have at most ~10 applications so it's fine.
+    # Next-page cursor returned to the client (applicationId of the last record)
+    next_key = None
+    if "LastEvaluatedKey" in result:
+        next_key = result["LastEvaluatedKey"].get("applicationId")
+
+    # Enrich missing jobUrls with a single batch_get_item call (replaces N+1 loop).
+    # Chunks of 25 to respect the DynamoDB batch limit.
     needs_url = [a for a in applications if a.get("jobId") and not a.get("jobUrl")]
     if needs_url:
-        jobs_table = dynamodb.Table(JOBS_TABLE)
         job_ids = list({a["jobId"] for a in needs_url})
-        job_urls = {}
-        for jid in job_ids:
+        job_urls: dict = {}
+        chunk_size = 25
+        for i in range(0, len(job_ids), chunk_size):
+            chunk = job_ids[i : i + chunk_size]
             try:
-                item = jobs_table.get_item(
-                    Key={"jobId": jid},
-                    ProjectionExpression="jobId, #u",
-                    ExpressionAttributeNames={"#u": "url"},
-                ).get("Item", {})
-                if item:
-                    job_urls[jid] = item.get("url", "")
+                resp = dynamodb.batch_get_item(
+                    RequestItems={
+                        JOBS_TABLE: {
+                            "Keys": [{"jobId": jid} for jid in chunk],
+                            "ProjectionExpression": "jobId, #u",
+                            "ExpressionAttributeNames": {"#u": "url"},
+                        }
+                    }
+                )
+                for item in resp.get("Responses", {}).get(JOBS_TABLE, []):
+                    job_urls[item["jobId"]] = item.get("url", "")
             except Exception as e:
-                print(f"Could not fetch URL for job {jid}: {e}")
-        for app in applications:
-            if app.get("jobId") and app["jobId"] in job_urls:
-                app["jobUrl"] = job_urls[app["jobId"]]
+                print(f"batch_get_item failed (non-fatal): {e}")
 
-    return response(200, {"applications": applications})
+        for app in applications:
+            jid = app.get("jobId")
+            if jid and jid in job_urls:
+                app["jobUrl"] = job_urls[jid]
+
+    payload: dict = {"applications": applications}
+    if next_key:
+        payload["nextKey"] = next_key
+    return response(200, payload)
 
 
 def handle_get_upload_url(event: dict) -> dict:
