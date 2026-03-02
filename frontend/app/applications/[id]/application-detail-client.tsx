@@ -1,38 +1,38 @@
 "use client";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { isAuthenticated } from "@/lib/auth";
+import { getApplications } from "@/lib/api";
 
-// Mock data — replace with real API call using useEffect
-const MOCK = {
-  company: "Stripe",
-  jobTitle: "Senior Software Engineer",
-  location: "Remote (UK)",
-  salary: "£95,000 – £130,000",
-  matchScore: 94,
-  alignmentScore: 91,
-  status: "review",
-  alignmentReason:
-    "This role aligns with your goal of working at a high-growth fintech company on distributed systems. Stripe's engineering culture matches your preference for technical depth over management.",
-  jobDescription:
-    "We are looking for a Senior Software Engineer to join our Payments Infrastructure team. You will design and build highly reliable distributed systems that process payments at global scale...",
-  companyResearch:
-    "Stripe is a global fintech leader processing ~$1 trillion in payments annually. Engineering-first culture with strong emphasis on technical excellence. Remote-friendly. Known for competitive comp and equity.",
-  originalCvHighlights: [
-    "Built distributed systems at scale using Go and Kubernetes",
-    "Led backend team of 4 engineers",
-    "5 years of experience in financial services APIs",
-  ],
-  tailoredChanges: [
-    { type: "added",    text: "Highlighted payment processing experience in summary" },
-    { type: "modified", text: "Reordered skills to lead with Go, Kafka, distributed systems" },
-    { type: "added",    text: "Quantified API reliability improvement: 99.99% → 99.999% uptime" },
-    { type: "removed",  text: "Removed unrelated frontend work from early career" },
-  ],
-};
+interface Change {
+  type: "added" | "modified" | "removed";
+  section?: string;
+  description: string;
+}
+
+interface ApplicationDetail {
+  applicationId: string;
+  userId: string;
+  jobId?: string;
+  cvId?: string;
+  status: string;
+  companyName?: string;
+  jobTitle?: string;
+  matchScore?: string | number;
+  careerAlignmentScore?: string | number;
+  matchReason?: string;
+  cvChanges?: string; // JSON string stored by cv_tailor
+  tailoredCvKey?: string;
+  atsScore?: string | number;
+  coverLetter?: string;
+  createdAt?: string;
+}
 
 const CHANGE_COLOURS: Record<string, string> = {
   added:    "text-green-700 bg-green-50 border-green-200",
@@ -40,7 +40,98 @@ const CHANGE_COLOURS: Record<string, string> = {
   removed:  "text-red-700 bg-red-50 border-red-200",
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  pending:   "Pending",
+  matching:  "Matching",
+  tailoring: "Tailoring CV…",
+  review:    "Ready for review",
+  submitted: "Submitted",
+  interview: "Interview",
+  offer:     "Offer",
+  rejected:  "Rejected",
+};
+
 export default function ApplicationDetailClient() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params?.id as string;
+
+  const [app, setApp] = useState<ApplicationDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadData() {
+      // Auth check — uses fetchAuthSession so token refresh doesn't cause false negatives
+      const ok = await isAuthenticated();
+      if (!mounted) return;
+      if (!ok) {
+        router.push("/login");
+        return;
+      }
+
+      // Fetch all applications then find the one matching this URL
+      try {
+        const data = await getApplications();
+        const apps: ApplicationDetail[] = data.applications || [];
+        const found = apps.find((a) => a.applicationId === id);
+        if (!mounted) return;
+        if (found) {
+          setApp(found);
+        } else {
+          setError("Application not found");
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(err instanceof Error ? err.message : "Failed to load application");
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => { mounted = false; };
+  }, [id, router]);
+
+  // --- Loading ---
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">Loading application…</p>
+      </div>
+    );
+  }
+
+  // --- Error / not found ---
+  if (error || !app) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <p className="text-muted-foreground">{error || "Application not found"}</p>
+        <Button asChild variant="outline">
+          <Link href="/dashboard">← Back to Dashboard</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  // Parse cvChanges (stored as JSON string by cv_tailor Lambda)
+  let changes: Change[] = [];
+  if (app.cvChanges) {
+    try {
+      changes = JSON.parse(app.cvChanges);
+    } catch {
+      changes = [];
+    }
+  }
+
+  const matchScore = Number(app.matchScore) || 0;
+  const alignmentScore = Number(app.careerAlignmentScore) || 0;
+  const atsScore = Number(app.atsScore) || 0;
+  const statusLabel = STATUS_LABELS[app.status] ?? app.status;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
@@ -50,117 +141,171 @@ export default function ApplicationDetailClient() {
             ← Dashboard
           </Link>
           <Separator orientation="vertical" className="h-5" />
-          <span className="font-semibold">{MOCK.company} — {MOCK.jobTitle}</span>
-          <Badge className="ml-auto">{MOCK.status}</Badge>
+          <span className="font-semibold">
+            {app.companyName || "Company"} — {app.jobTitle || "Role"}
+          </span>
+          <Badge className="ml-auto">{statusLabel}</Badge>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left: Job details */}
+
+          {/* Left: scores + match reason + cover letter */}
           <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div>
-                    <CardTitle className="text-xl">{MOCK.jobTitle}</CardTitle>
-                    <p className="text-muted-foreground font-medium">{MOCK.company}</p>
+                    <CardTitle className="text-xl">{app.jobTitle || "Role"}</CardTitle>
+                    <p className="text-muted-foreground font-medium">{app.companyName || "Company"}</p>
                   </div>
                   <div className="text-right text-sm space-y-1">
-                    <Badge variant="secondary">{MOCK.matchScore}% match</Badge>
+                    {matchScore > 0 && (
+                      <Badge variant="secondary">{matchScore}% match</Badge>
+                    )}
                     <div />
-                    <Badge variant="outline">{MOCK.alignmentScore}% career fit</Badge>
+                    {alignmentScore > 0 && (
+                      <Badge variant="outline">{alignmentScore}% career fit</Badge>
+                    )}
                   </div>
-                </div>
-                <div className="flex gap-3 text-sm text-muted-foreground mt-1">
-                  <span>📍 {MOCK.location}</span>
-                  <span>💰 {MOCK.salary}</span>
                 </div>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="job">
+                <Tabs defaultValue="alignment">
                   <TabsList className="mb-3">
-                    <TabsTrigger value="job">Job</TabsTrigger>
-                    <TabsTrigger value="company">Company</TabsTrigger>
                     <TabsTrigger value="alignment">Why You</TabsTrigger>
+                    {app.coverLetter && (
+                      <TabsTrigger value="cover">Cover Letter</TabsTrigger>
+                    )}
                   </TabsList>
-                  <TabsContent value="job" className="text-sm text-muted-foreground leading-relaxed">
-                    {MOCK.jobDescription}
-                  </TabsContent>
-                  <TabsContent value="company" className="text-sm text-muted-foreground leading-relaxed">
-                    {MOCK.companyResearch}
-                  </TabsContent>
+
                   <TabsContent value="alignment" className="text-sm leading-relaxed">
-                    <p className="text-muted-foreground">{MOCK.alignmentReason}</p>
+                    {app.matchReason ? (
+                      <p className="text-muted-foreground">{app.matchReason}</p>
+                    ) : (
+                      <p className="text-muted-foreground italic">
+                        Match reasoning not yet available.
+                      </p>
+                    )}
                   </TabsContent>
+
+                  {app.coverLetter && (
+                    <TabsContent
+                      value="cover"
+                      className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto"
+                    >
+                      {app.coverLetter}
+                    </TabsContent>
+                  )}
                 </Tabs>
               </CardContent>
             </Card>
 
             {/* Actions */}
             <div className="flex gap-3">
-              <Button className="flex-1">✓ Approve &amp; Submit</Button>
-              <Button variant="outline" className="flex-1">✏️ Edit CV</Button>
-              <Button variant="ghost">Skip</Button>
+              <Button
+                className="flex-1"
+                disabled={app.status !== "review"}
+                title={
+                  app.status !== "review"
+                    ? "CV tailoring must complete before you can approve"
+                    : ""
+                }
+              >
+                ✓ Approve &amp; Submit
+              </Button>
+              <Button variant="ghost" onClick={() => router.push("/dashboard")}>
+                ← Back
+              </Button>
             </div>
+
+            {app.status === "tailoring" && (
+              <p className="text-xs text-muted-foreground text-center">
+                ✏️ AI is tailoring your CV for this role — usually takes 1–2 minutes.
+                Refresh to check for updates.
+              </p>
+            )}
           </div>
 
-          {/* Right: CV diff */}
+          {/* Right: CV changes + ATS score + metadata */}
           <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">CV Changes for {MOCK.company}</CardTitle>
+                <CardTitle className="text-base">
+                  CV Changes for {app.companyName || "this role"}
+                </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  What we tailored to match this role and company
+                  {changes.length > 0
+                    ? "What we tailored to match this role and company"
+                    : app.status === "tailoring"
+                    ? "Tailoring in progress — changes will appear here shortly"
+                    : "No tailoring changes recorded yet"}
                 </p>
               </CardHeader>
               <CardContent className="space-y-2">
-                {MOCK.tailoredChanges.map((change, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 text-sm px-3 py-2 rounded border ${CHANGE_COLOURS[change.type]}`}
-                  >
-                    <span className="font-semibold capitalize whitespace-nowrap">{change.type}</span>
-                    <span>{change.text}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Your Strongest Highlights</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {MOCK.originalCvHighlights.map((h, i) => (
-                    <li key={i} className="flex gap-2 text-sm">
-                      <span className="text-green-600 mt-0.5">✓</span>
-                      <span>{h}</span>
-                    </li>
-                  ))}
-                </ul>
+                {changes.length > 0 ? (
+                  changes.map((change, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-start gap-2 text-sm px-3 py-2 rounded border ${
+                        CHANGE_COLOURS[change.type] ?? ""
+                      }`}
+                    >
+                      <span className="font-semibold capitalize whitespace-nowrap">
+                        {change.type}
+                      </span>
+                      <span>{change.description}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground py-2">
+                    {app.status === "tailoring" ? "⏳ Check back in a moment…" : "—"}
+                  </p>
+                )}
               </CardContent>
             </Card>
 
             {/* ATS Score */}
+            {atsScore > 0 && (
+              <Card>
+                <CardContent className="pt-4 pb-4 flex items-center gap-6">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Original ATS</p>
+                    <p className="text-2xl font-bold text-muted-foreground">—</p>
+                  </div>
+                  <div className="flex-1 h-px bg-border relative">
+                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs text-muted-foreground">
+                      →
+                    </span>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Tailored ATS</p>
+                    <p className="text-2xl font-bold text-green-600">{atsScore}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Application metadata */}
             <Card>
-              <CardContent className="pt-4 pb-4 flex items-center gap-6">
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Original ATS</p>
-                  <p className="text-2xl font-bold text-muted-foreground">61</p>
+              <CardContent className="pt-4 pb-4 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Status</p>
+                  <p className="font-medium">{statusLabel}</p>
                 </div>
-                <div className="flex-1 h-px bg-border relative">
-                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs text-muted-foreground">→</span>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Tailored ATS</p>
-                  <p className="text-2xl font-bold text-green-600">88</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-green-600 font-medium">+27 pts</p>
-                  <p className="text-xs text-muted-foreground">improvement</p>
-                </div>
+                {app.createdAt && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Found</p>
+                    <p className="font-medium">
+                      {new Date(app.createdAt).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -32,11 +32,15 @@ export async function getAuthToken(): Promise<string | null> {
   }
 }
 
-/** Check if user is signed in */
+/** Check if user is signed in.
+ *  Uses fetchAuthSession so Amplify auto-refreshes an expired access token
+ *  before deciding the user is logged out. getCurrentUser() can throw during
+ *  the brief refresh window, causing spurious redirects to /login.
+ */
 export async function isAuthenticated(): Promise<boolean> {
   try {
-    await getCurrentUser();
-    return true;
+    const session = await fetchAuthSession();
+    return !!session.tokens?.idToken;
   } catch {
     return false;
   }

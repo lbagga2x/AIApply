@@ -38,19 +38,24 @@ export default function DashboardPage() {
   const [apiError, setApiError] = useState("");
 
   useEffect(() => {
+    let mounted = true;
+
     isAuthenticated().then((ok) => {
-      if (!ok) router.push("/login");
+      if (!ok && mounted) router.push("/login");
     });
+
     getApplications()
       .then((data) => {
-        if (data.applications?.length > 0) {
+        if (mounted && data.applications?.length > 0) {
           setApps(data.applications);
         }
       })
       .catch((err: unknown) => {
-        setApiError(err instanceof Error ? err.message : "API unavailable");
+        if (mounted) setApiError(err instanceof Error ? err.message : "API unavailable");
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (mounted) setLoading(false); });
+
+    return () => { mounted = false; };
   }, [router]);
 
   const stats = {
