@@ -71,6 +71,13 @@ const STATUS_COLS: {
     colour: "bg-green-50/80 border-green-200/80 dark:bg-green-950/40 dark:border-green-700/50",
     accent: "bg-green-400 dark:bg-green-500",
   },
+  {
+    key: "rejected",
+    label: "Rejected",
+    emoji: "✖",
+    colour: "bg-red-50/80 border-red-200/80 dark:bg-red-950/40 dark:border-red-700/50",
+    accent: "bg-red-400 dark:bg-red-500",
+  },
 ];
 
 function formatRelativeTime(isoString: string): string {

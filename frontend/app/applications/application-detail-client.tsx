@@ -97,8 +97,6 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_OPTIONS: { key: string; label: string }[] = [
-  { key: "matched", label: "Matched" },
-  { key: "tailoring", label: "Tailoring" },
   { key: "review", label: "Review" },
   { key: "submitted", label: "Submitted" },
   { key: "interview", label: "Interview" },
