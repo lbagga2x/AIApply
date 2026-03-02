@@ -34,6 +34,7 @@ interface Application {
 }
 
 const MANUAL_STATUS_OPTIONS: { key: AppStatus; label: string }[] = [
+  { key: "matched", label: "Matched" },
   { key: "review", label: "Review" },
   { key: "submitted", label: "Submitted" },
   { key: "interview", label: "Interview" },
@@ -212,13 +213,17 @@ export default function DashboardPage() {
       setManualError("Please enter at least a company name or a job title.");
       return;
     }
+    if (!manualUrl.trim()) {
+      setManualError("Please enter the job link.");
+      return;
+    }
     setManualSaving(true);
     setManualError("");
     try {
       const status =
-        (["review", "submitted", "interview", "offer", "rejected"].includes(manualStatus)
+        (["matched", "review", "submitted", "interview", "offer", "rejected"].includes(manualStatus)
           ? manualStatus
-          : "submitted") as "review" | "submitted" | "interview" | "offer" | "rejected";
+          : "submitted") as "matched" | "review" | "submitted" | "interview" | "offer" | "rejected";
 
       const res = await createManualApplication({
         companyName: manualCompany.trim(),
@@ -353,7 +358,7 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="manual-url">Job link (optional)</Label>
+                    <Label htmlFor="manual-url">Job link</Label>
                     <Input
                       id="manual-url"
                       value={manualUrl}

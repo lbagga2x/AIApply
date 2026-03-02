@@ -444,25 +444,58 @@ def handle_create_manual_application(event: dict) -> dict:
     company_name = (body.get("companyName") or "").strip()
     job_title = (body.get("jobTitle") or "").strip()
     job_url = (body.get("jobUrl") or "").strip()
+    job_description = (body.get("jobDescription") or "").strip()
     status = body.get("status") or "submitted"
 
     if not company_name and not job_title:
         return response(400, {"error": "companyName or jobTitle required"})
+    if not job_url:
+        return response(400, {"error": "jobUrl required"})
 
-    allowed_statuses = {"review", "submitted", "interview", "offer", "rejected"}
+    allowed_statuses = {"matched", "review", "submitted", "interview", "offer", "rejected"}
     if status not in allowed_statuses:
         return response(400, {"error": f"Invalid status: {status}"})
 
     now = datetime.now(timezone.utc).isoformat()
     application_id = str(uuid.uuid4())
 
+    # Attach user's primary CV so tailoring works for manual entries.
+    cvs_table = dynamodb.Table(CVS_TABLE)
+    cv_result = cvs_table.query(
+        KeyConditionExpression="userId = :uid",
+        ExpressionAttributeValues={":uid": user_id},
+        Limit=1,
+    )
+    cv_items = cv_result.get("Items", [])
+    if not cv_items:
+        return response(400, {"error": "Please upload a CV first"})
+    cv_id = cv_items[0]["cvId"]
+
+    # Create a minimal job record so cv_tailor can load it by jobId.
+    job_id = str(uuid.uuid4())
+    jobs_table = dynamodb.Table(JOBS_TABLE)
+    jobs_table.put_item(
+        Item={
+            "jobId": job_id,
+            "title": job_title or "",
+            "company": company_name or "",
+            "url": job_url,
+            "description": job_description,
+            "source": "manual",
+            "createdAt": now,
+        }
+    )
+
     item = {
         "userId": user_id,
         "applicationId": application_id,
         "status": status,
+        "jobId": job_id,
+        "cvId": cv_id,
         "companyName": company_name or None,
         "jobTitle": job_title or None,
-        "jobUrl": job_url or None,
+        "jobUrl": job_url,
+        "jobDescription": job_description or None,
         "source": "manual",
         "createdAt": now,
         "updatedAt": now,
