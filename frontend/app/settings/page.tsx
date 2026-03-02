@@ -107,6 +107,8 @@ export default function SettingsPage() {
   const [maxSalary, setMaxSalary] = useState("");
   const [locations, setLocations] = useState("");
   const [arrangement, setArrangement] = useState<string[]>(["Remote"]);
+  const [minMatchScore, setMinMatchScore] = useState("70");
+  const [minAlignmentScore, setMinAlignmentScore] = useState("70");
   const [autoApply, setAutoApply] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -128,6 +130,16 @@ export default function SettingsPage() {
       setMaxSalary(g.maxSalary ?? "");
       setLocations((g.locations ?? []).join(", "));
       setArrangement(g.workArrangement ?? ["Remote"]);
+      setMinMatchScore(
+        g.minMatchScore != null && g.minMatchScore !== ""
+          ? String(g.minMatchScore)
+          : "70"
+      );
+      setMinAlignmentScore(
+        g.minAlignmentScore != null && g.minAlignmentScore !== ""
+          ? String(g.minAlignmentScore)
+          : "70"
+      );
       setLastScannedAt(data.lastScannedAt ?? null);
       if (data.usage) setUsage(data.usage);
     }).catch(() => {});
@@ -170,6 +182,8 @@ export default function SettingsPage() {
         maxSalary: maxSalary ? Number(maxSalary) : null,
         locations: locations.split(",").map((l) => l.trim()).filter(Boolean),
         workArrangement: arrangement,
+        minMatchScore: minMatchScore ? Number(minMatchScore) : 70,
+        minAlignmentScore: minAlignmentScore ? Number(minAlignmentScore) : 70,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -243,7 +257,7 @@ export default function SettingsPage() {
             <CardDescription>Affects all future job matching and scoring</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSave} className="space-y-4">
+            <form onSubmit={handleSave} className="space-y-5">
               <div className="space-y-1.5">
                 <Label className="text-[13px]">Target Job Titles</Label>
                 <Input
@@ -280,6 +294,38 @@ export default function SettingsPage() {
                       {wa}
                     </Badge>
                   ))}
+                </div>
+              </div>
+
+              {/* Matching strictness */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[13px]">
+                    Minimum match score
+                    <span className="ml-1 text-[11px] text-muted-foreground">(skills fit, 0–100)</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={minMatchScore}
+                    onChange={(e) => setMinMatchScore(e.target.value)}
+                    className="border-border/60"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px]">
+                    Minimum career alignment
+                    <span className="ml-1 text-[11px] text-muted-foreground">(long‑term fit, 0–100)</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={minAlignmentScore}
+                    onChange={(e) => setMinAlignmentScore(e.target.value)}
+                    className="border-border/60"
+                  />
                 </div>
               </div>
               <Button type="submit" disabled={saving} className="h-9 text-[13px]">

@@ -109,11 +109,23 @@ def scrape_jobs(search_terms: list[str], location: str, num_results: int = 20) -
 
 
 def score_jobs_with_claude(jobs: list[dict], career_goals: dict, cv_summary: str) -> list[dict]:
-    """Use Claude to score each job against career goals and CV."""
+    """Use Claude to score each job against career goals and CV.
+
+    Respects optional user thresholds from career_goals:
+    - minMatchScore (default 70)
+    - minAlignmentScore (default 70)
+    - maxMatches (default 10)
+    """
     if not jobs:
         return [], None
 
     client = get_client()
+
+    # User-tunable thresholds with sensible defaults
+    min_match = int(career_goals.get("minMatchScore", 70) or 70)
+    min_align = int(career_goals.get("minAlignmentScore", 70) or 70)
+    max_matches = int(career_goals.get("maxMatches", 10) or 10)
+    max_matches = max(1, min(max_matches, 50))
 
     # Build a compact job list for scoring
     job_list = "\n".join([
@@ -127,6 +139,8 @@ def score_jobs_with_claude(jobs: list[dict], career_goals: dict, cv_summary: str
         "workArrangement": career_goals.get("workArrangement", ["Remote"]),
         "dealbreakers": career_goals.get("dealbreakers", []),
         "minSalary": career_goals.get("minSalary"),
+        "minMatchScore": min_match,
+        "minAlignmentScore": min_align,
     }, cls=DecimalEncoder)
 
     message = client.messages.create(
@@ -176,17 +190,25 @@ Only return jobs with a realistic chance of success.""",
     scored_jobs = []
     for i, job in enumerate(jobs):
         score_data = score_map.get(i + 1, {})
-        if score_data.get("include", False):
+        match_score = score_data.get("matchScore", 0)
+        align_score = score_data.get("careerAlignmentScore", 0)
+        include_flag = score_data.get("include", False)
+
+        # Safety net: enforce user thresholds even if Claude forgot to
+        if include_flag and (match_score < min_match or align_score < min_align):
+            include_flag = False
+
+        if include_flag:
             scored_jobs.append({
                 **job,
-                "matchScore": score_data.get("matchScore", 0),
-                "careerAlignmentScore": score_data.get("careerAlignmentScore", 0),
+                "matchScore": match_score,
+                "careerAlignmentScore": align_score,
                 "matchReason": score_data.get("matchReason", ""),
             })
 
-    # Sort by combined score
+    # Sort by combined score and cap by user preference
     scored_jobs.sort(key=lambda j: j["matchScore"] + j["careerAlignmentScore"], reverse=True)
-    return scored_jobs[:10], message.usage  # top 10 + usage stats
+    return scored_jobs[:max_matches], message.usage  # top N + usage stats
 
 
 def lambda_handler(event, context):
