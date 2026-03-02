@@ -94,6 +94,8 @@ export default function ApplicationDetailClient() {
   const [tailoring, setTailoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [copiedCover, setCopiedCover] = useState(false);
+  const [copiedCv, setCopiedCv] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -211,6 +213,31 @@ export default function ApplicationDetailClient() {
   const isMatched      = app.status === "matched";
   const canApprove     = app.status === "review";
   const isSubmitted    = app.status === "submitted";
+  const coverLetterText = app.coverLetter?.trim() ?? "";
+  const tailoredCvText = tailoredCV ? formatTailoredCvAsText(tailoredCV).trim() : "";
+
+  async function copyText(text: string) {
+    if (!text) return;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+    } catch {
+      // fall back below
+    }
+
+    // Fallback for older browsers / non-secure contexts
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -285,11 +312,24 @@ export default function ApplicationDetailClient() {
                     </p>
                   </TabsContent>
                   {app.coverLetter && (
-                    <TabsContent
-                      value="cover"
-                      className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto"
-                    >
-                      {app.coverLetter}
+                    <TabsContent value="cover" className="space-y-3">
+                      <div className="flex items-center justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={!coverLetterText}
+                          onClick={async () => {
+                            await copyText(coverLetterText);
+                            setCopiedCover(true);
+                            window.setTimeout(() => setCopiedCover(false), 1200);
+                          }}
+                        >
+                          {copiedCover ? "Copied" : "Copy cover letter"}
+                        </Button>
+                      </div>
+                      <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto">
+                        {app.coverLetter}
+                      </div>
                     </TabsContent>
                   )}
                 </Tabs>
@@ -431,7 +471,23 @@ export default function ApplicationDetailClient() {
                       {cvLoading ? (
                         <p className="text-sm text-muted-foreground py-4 text-center">Loading CV…</p>
                       ) : tailoredCV ? (
-                        <TailoredCVView cv={tailoredCV} />
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!tailoredCvText}
+                              onClick={async () => {
+                                await copyText(tailoredCvText);
+                                setCopiedCv(true);
+                                window.setTimeout(() => setCopiedCv(false), 1200);
+                              }}
+                            >
+                              {copiedCv ? "Copied" : "Copy tailored CV"}
+                            </Button>
+                          </div>
+                          <TailoredCVView cv={tailoredCV} />
+                        </div>
                       ) : null}
                     </TabsContent>
                   )}
@@ -463,6 +519,61 @@ export default function ApplicationDetailClient() {
       </main>
     </div>
   );
+}
+
+function formatTailoredCvAsText(cv: TailoredCV) {
+  const lines: string[] = [];
+
+  if (cv.name) lines.push(cv.name);
+  const contact = [cv.email, cv.phone, cv.location].filter(Boolean).join(" · ");
+  if (contact) lines.push(contact);
+  if (cv.name || contact) lines.push("");
+
+  if (cv.summary) {
+    lines.push("SUMMARY");
+    lines.push(cv.summary);
+    lines.push("");
+  }
+
+  if (cv.skills && cv.skills.length > 0) {
+    lines.push("SKILLS");
+    lines.push(cv.skills.join(", "));
+    lines.push("");
+  }
+
+  if (cv.experience && cv.experience.length > 0) {
+    lines.push("EXPERIENCE");
+    for (const exp of cv.experience) {
+      const titleCompany = [exp.title, exp.company].filter(Boolean).join(" — ");
+      const dates = [exp.startDate, exp.endDate].filter(Boolean).join(" – ");
+      if (titleCompany) lines.push(titleCompany);
+      if (dates) lines.push(dates);
+      if (exp.description) lines.push(exp.description);
+      if (exp.highlights && exp.highlights.length > 0) {
+        for (const h of exp.highlights) lines.push(`- ${h}`);
+      }
+      lines.push("");
+    }
+  }
+
+  if (cv.education && cv.education.length > 0) {
+    lines.push("EDUCATION");
+    for (const edu of cv.education) {
+      const degreeField = [edu.degree, edu.field].filter(Boolean).join(" — ");
+      const instYear = [edu.institution, edu.year].filter(Boolean).join(", ");
+      if (degreeField) lines.push(degreeField);
+      if (instYear) lines.push(instYear);
+      lines.push("");
+    }
+  }
+
+  if (cv.certifications && cv.certifications.length > 0) {
+    lines.push("CERTIFICATIONS");
+    for (const c of cv.certifications) lines.push(`- ${c}`);
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
 }
 
 /* ── Tailored CV renderer ── */
