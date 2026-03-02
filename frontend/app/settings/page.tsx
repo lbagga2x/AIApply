@@ -109,6 +109,7 @@ export default function SettingsPage() {
   const [arrangement, setArrangement] = useState<string[]>(["Remote"]);
   const [minMatchScore, setMinMatchScore] = useState("70");
   const [minAlignmentScore, setMinAlignmentScore] = useState("70");
+  const [jobWindowHours, setJobWindowHours] = useState("72");
   const [autoApply, setAutoApply] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -139,6 +140,11 @@ export default function SettingsPage() {
         g.minAlignmentScore != null && g.minAlignmentScore !== ""
           ? String(g.minAlignmentScore)
           : "70"
+      );
+      setJobWindowHours(
+        g.jobWindowHours != null && g.jobWindowHours !== ""
+          ? String(g.jobWindowHours)
+          : "72"
       );
       setLastScannedAt(data.lastScannedAt ?? null);
       if (data.usage) setUsage(data.usage);
@@ -184,6 +190,7 @@ export default function SettingsPage() {
         workArrangement: arrangement,
         minMatchScore: minMatchScore ? Number(minMatchScore) : 70,
         minAlignmentScore: minAlignmentScore ? Number(minAlignmentScore) : 70,
+        jobWindowHours: jobWindowHours ? Number(jobWindowHours) : 72,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -298,7 +305,7 @@ export default function SettingsPage() {
               </div>
 
               {/* Matching strictness */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-[13px]">
                     Minimum match score
@@ -324,6 +331,20 @@ export default function SettingsPage() {
                     max={100}
                     value={minAlignmentScore}
                     onChange={(e) => setMinAlignmentScore(e.target.value)}
+                    className="border-border/60"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px]">
+                    Job age window
+                    <span className="ml-1 text-[11px] text-muted-foreground">(hours, 24–336)</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min={24}
+                    max={336}
+                    value={jobWindowHours}
+                    onChange={(e) => setJobWindowHours(e.target.value)}
                     className="border-border/60"
                   />
                 </div>

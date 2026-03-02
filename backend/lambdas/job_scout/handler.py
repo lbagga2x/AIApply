@@ -73,7 +73,7 @@ def get_client():
     return _anthropic_client
 
 
-def scrape_jobs(search_terms: list[str], location: str, num_results: int = 20) -> list[dict]:
+def scrape_jobs(search_terms: list[str], location: str, num_results: int = 20, hours_old: int = 72) -> list[dict]:
     """Use JobSpy to scrape job listings."""
     try:
         from jobspy import scrape_jobs as jobspy_scrape
@@ -82,7 +82,7 @@ def scrape_jobs(search_terms: list[str], location: str, num_results: int = 20) -
             search_term=" OR ".join(search_terms[:3]),
             location=location or "Remote",
             results_wanted=num_results,
-            hours_old=72,  # last 3 days only
+            hours_old=hours_old,  # configurable "recent jobs" window
             country_indeed="UK",
         )
         if jobs_df is None or jobs_df.empty:
@@ -248,7 +248,12 @@ def lambda_handler(event, context):
                 location = loc_parts[-1].strip() if len(loc_parts) > 1 else cv_data["location"]
             else:
                 location = "worldwide"
-            raw_jobs = scrape_jobs(target_roles, location, num_results=30)
+
+            # User-tunable recency window (in hours), with safe defaults/bounds
+            window_hours = int(career_goals.get("jobWindowHours", 72) or 72)
+            window_hours = max(24, min(window_hours, 336))  # 1–14 days
+
+            raw_jobs = scrape_jobs(target_roles, location, num_results=30, hours_old=window_hours)
 
             if not raw_jobs:
                 print("No jobs found from scrapers")
@@ -263,7 +268,24 @@ def lambda_handler(event, context):
             jobs_table = dynamodb.Table(JOBS_TABLE)
             apps_table = dynamodb.Table(APPLICATIONS_TABLE)
 
+            # Load existing job URLs for this user to avoid duplicates across scans
+            existing = apps_table.query(
+                KeyConditionExpression="userId = :uid",
+                ExpressionAttributeValues={":uid": user_id},
+                ProjectionExpression="jobUrl",
+            )
+            existing_urls = {
+                item["jobUrl"]
+                for item in existing.get("Items", [])
+                if item.get("jobUrl")
+            }
+
             for job in matched_jobs:
+                job_url = job.get("url", "")
+                if job_url and job_url in existing_urls:
+                    # Skip if we've already created an application for this posting
+                    continue
+
                 # Save job listing
                 jobs_table.put_item(Item=job)
 
@@ -282,9 +304,11 @@ def lambda_handler(event, context):
                     "matchScore": str(job["matchScore"]),
                     "careerAlignmentScore": str(job["careerAlignmentScore"]),
                     "matchReason": job["matchReason"],
-                    "jobUrl": job.get("url", ""),
+                    "jobUrl": job_url,
                     "createdAt": datetime.now(timezone.utc).isoformat(),
                 })
+                if job_url:
+                    existing_urls.add(job_url)
                 # CV tailoring is now triggered manually by the user via POST /api/applications/tailor
                 # (no automatic SQS send here — saves tokens on jobs the user doesn't want)
 
