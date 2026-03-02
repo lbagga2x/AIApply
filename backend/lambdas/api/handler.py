@@ -436,6 +436,45 @@ def handle_update_application_status(event: dict) -> dict:
     return response(200, {"message": "Status updated", "status": new_status, "updatedAt": now})
 
 
+def handle_save_application_notes(event: dict) -> dict:
+    """POST /api/applications/notes — Save personal notes for an application."""
+    user_id = get_user_id(event)
+    body = json.loads(event.get("body", "{}"))
+    application_id = body.get("applicationId")
+    raw_notes = body.get("notes", "")
+
+    if not application_id:
+        return response(400, {"error": "applicationId required"})
+
+    # Normalise notes to a bounded-length string (defensive; frontend already keeps it reasonable)
+    notes = (raw_notes or "").strip()
+    if len(notes) > 5000:
+        notes = notes[:5000]
+
+    table = dynamodb.Table(APPLICATIONS_TABLE)
+
+    # Verify ownership and existence
+    existing = table.get_item(
+        Key={"userId": user_id, "applicationId": application_id}
+    ).get("Item")
+    if not existing:
+        return response(404, {"error": "Application not found"})
+
+    now = datetime.now(timezone.utc).isoformat()
+    update_expr = "SET notes = :n, updatedAt = :t"
+    expr_values = {
+        ":n": notes,
+        ":t": now,
+    }
+
+    table.update_item(
+        Key={"userId": user_id, "applicationId": application_id},
+        UpdateExpression=update_expr,
+        ExpressionAttributeValues=expr_values,
+    )
+
+    return response(200, {"message": "Notes saved", "notes": notes, "updatedAt": now})
+
 def handle_create_manual_application(event: dict) -> dict:
     """POST /api/applications/manual — Create an application the user found/applied to manually."""
     user_id = get_user_id(event)
@@ -617,6 +656,8 @@ def lambda_handler(event, context):
         return handle_approve_application(event)
     elif raw_path == "/api/applications/status" and method == "PUT":
         return handle_update_application_status(event)
+    elif raw_path == "/api/applications/notes" and method == "POST":
+        return handle_save_application_notes(event)
     elif raw_path == "/api/applications/manual" and method == "POST":
         return handle_create_manual_application(event)
     elif raw_path == "/api/applications/tailored-cv" and method == "GET":

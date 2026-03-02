@@ -85,6 +85,13 @@ export async function updateApplicationStatus(applicationId: string, status: str
   });
 }
 
+export async function saveApplicationNotes(applicationId: string, notes: string) {
+  return apiFetch("/api/applications/notes", {
+    method: "POST",
+    body: JSON.stringify({ applicationId, notes }),
+  });
+}
+
 export async function createManualApplication(input: {
   companyName?: string;
   jobTitle?: string;

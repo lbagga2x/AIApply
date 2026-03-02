@@ -24,6 +24,7 @@ import {
   deleteApplication,
   tailorApplication,
   updateApplicationStatus,
+  saveApplicationNotes,
 } from "@/lib/api";
 
 interface Change {
@@ -76,6 +77,7 @@ interface ApplicationDetail {
   jobDescription?: string;
   jobLocation?: string;
   createdAt?: string;
+  notes?: string;
 }
 
 const CHANGE_COLOURS: Record<string, string> = {
@@ -122,6 +124,10 @@ export default function ApplicationDetailClient() {
   const [error, setError] = useState("");
   const [copiedCover, setCopiedCover] = useState(false);
   const [copiedCv, setCopiedCv] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesError, setNotesError] = useState("");
+  const [notesSavedAt, setNotesSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -141,6 +147,7 @@ export default function ApplicationDetailClient() {
         if (!mounted) return;
         if (found) {
           setApp(found);
+          setNotes((found.notes as string) || "");
           // Auto-fetch tailored CV if it's ready
           if (found.tailoredCvKey) {
             fetchTailoredCV(id);
@@ -222,6 +229,21 @@ export default function ApplicationDetailClient() {
       setStatusError(err instanceof Error ? err.message : "Failed to update status");
     } finally {
       setStatusUpdating(false);
+    }
+  }
+
+  async function handleSaveNotes() {
+    if (!app || notesSaving) return;
+    setNotesSaving(true);
+    setNotesError("");
+    try {
+      await saveApplicationNotes(app.applicationId, notes);
+      setApp((prev) => (prev ? { ...prev, notes } : prev));
+      setNotesSavedAt(new Date().toISOString());
+    } catch (err) {
+      setNotesError(err instanceof Error ? err.message : "Failed to save notes");
+    } finally {
+      setNotesSaving(false);
     }
   }
 
@@ -587,6 +609,41 @@ export default function ApplicationDetailClient() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Personal notes */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Notes</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Add your own notes about this role — interviewers, next steps, gut feel.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <textarea
+                  className="w-full min-h-[140px] text-sm rounded-md border border-input bg-background px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="e.g. Strong culture fit, focus on observability and AWS. Prep stories around migrations and stakeholder management."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  disabled={notesSaving}
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSaveNotes}
+                    disabled={notesSaving}
+                  >
+                    {notesSaving ? "Saving…" : "Save notes"}
+                  </Button>
+                  <div className="text-xs text-muted-foreground text-right space-y-0.5">
+                    {notesError && <p className="text-red-600">{notesError}</p>}
+                    {!notesError && notesSavedAt && (
+                      <p>Saved just now</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
         </div>
