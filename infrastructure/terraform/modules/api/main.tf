@@ -43,6 +43,10 @@ variable "sqs_job_scout_queue_url" {
   type = string
 }
 
+variable "sqs_cv_tailor_queue_url" {
+  type = string
+}
+
 # --- Store API key in SSM Parameter Store (free, unlike Secrets Manager $0.40/mo) ---
 resource "aws_ssm_parameter" "anthropic_key" {
   name  = "/${var.prefix}/anthropic-api-key"
@@ -184,9 +188,10 @@ resource "aws_lambda_function" "job_scout" {
 
   environment {
     variables = {
-      ENVIRONMENT         = var.environment
+      ENVIRONMENT          = var.environment
       ANTHROPIC_PARAM_NAME = aws_ssm_parameter.anthropic_key.name
-      CV_BUCKET           = var.cv_bucket_name
+      CV_BUCKET            = var.cv_bucket_name
+      CV_TAILOR_QUEUE_URL  = var.sqs_cv_tailor_queue_url
     }
   }
 }

@@ -41,6 +41,7 @@ module "api" {
   dynamodb_table_arns = module.storage.dynamodb_table_arns
   sqs_queue_arns          = [module.queue.job_scout_queue_arn, module.queue.cv_tailor_queue_arn]
   sqs_job_scout_queue_url = module.queue.job_scout_queue_url
+  sqs_cv_tailor_queue_url = module.queue.cv_tailor_queue_url
   sqs_job_scout_queue_arn = module.queue.job_scout_queue_arn
   sqs_cv_tailor_queue_arn = module.queue.cv_tailor_queue_arn
   cognito_user_pool_arn   = module.auth.user_pool_arn

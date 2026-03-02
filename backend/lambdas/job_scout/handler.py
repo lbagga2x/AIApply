@@ -190,9 +190,18 @@ def lambda_handler(event, context):
                         f"Experience: {cv_data.get('totalYearsExperience', 0)} years. " \
                         f"Level: {cv_data.get('seniorityLevel', 'mid')}."
 
-            # Scrape jobs
+            # Scrape jobs — prefer user's stated location, fall back to CV location,
+            # then "worldwide" (JobSpy accepts this; "Remote" causes geocoding errors)
             target_roles = career_goals.get("targetRoles", ["Software Engineer"])
-            location = (career_goals.get("locations") or ["Remote"])[0]
+            stated_locations = career_goals.get("locations") or []
+            if stated_locations:
+                location = stated_locations[0]
+            elif cv_data.get("location"):
+                # Extract just the country part (e.g. "Porto, Portugal" → "Portugal")
+                loc_parts = cv_data["location"].rsplit(",", 1)
+                location = loc_parts[-1].strip() if len(loc_parts) > 1 else cv_data["location"]
+            else:
+                location = "worldwide"
             raw_jobs = scrape_jobs(target_roles, location, num_results=30)
 
             if not raw_jobs:
