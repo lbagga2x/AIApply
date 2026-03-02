@@ -25,4 +25,5 @@ variable "anthropic_api_key" {
 variable "github_repo" {
   description = "GitHub repo in 'owner/repo-name' format, e.g. 'johnsmith/AIApply'"
   type        = string
+  default     = "lbagga2x/AIApply"
 }
