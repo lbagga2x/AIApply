@@ -132,9 +132,10 @@ resource "aws_lambda_function" "cv_analyst" {
 
   environment {
     variables = {
-      ENVIRONMENT         = var.environment
+      ENVIRONMENT          = var.environment
       ANTHROPIC_PARAM_NAME = aws_ssm_parameter.anthropic_key.name
-      CV_BUCKET           = var.cv_bucket_name
+      CV_BUCKET            = var.cv_bucket_name
+      SQS_JOB_SCOUT_URL    = var.sqs_job_scout_queue_url
     }
   }
 }

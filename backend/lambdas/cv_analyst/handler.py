@@ -12,6 +12,7 @@ import anthropic
 
 # Initialize AWS clients
 s3 = boto3.client("s3")
+sqs = boto3.client("sqs")
 dynamodb = boto3.resource("dynamodb")
 ssm = boto3.client("ssm")
 
@@ -19,6 +20,7 @@ ssm = boto3.client("ssm")
 CV_BUCKET = os.environ.get("CV_BUCKET", "aiapply-dev-cv-storage")
 ANTHROPIC_PARAM_NAME = os.environ.get("ANTHROPIC_PARAM_NAME", "")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+SQS_JOB_SCOUT_URL = os.environ.get("SQS_JOB_SCOUT_URL", "")
 
 # Table names
 CVS_TABLE = f"aiapply-{ENVIRONMENT}-cvs"
@@ -188,6 +190,29 @@ def lambda_handler(event, context):
         )
 
         print(f"Saved CV data for user {user_id}, cv {cv_id}")
+
+        # Race-condition guard: if the user already saved career goals before
+        # cv_analyst finished, the career-goals handler would have found no CV
+        # and skipped triggering job_scout. Check now and fire it ourselves.
+        users_table = dynamodb.Table(USERS_TABLE)
+        user_item = users_table.get_item(Key={"userId": user_id}).get("Item", {})
+        if user_item.get("careerGoals"):
+            try:
+                if SQS_JOB_SCOUT_URL:
+                    queue_url = SQS_JOB_SCOUT_URL
+                else:
+                    account_id = boto3.client("sts").get_caller_identity()["Account"]
+                    region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+                    queue_url = f"https://sqs.{region}.amazonaws.com/{account_id}/aiapply-{ENVIRONMENT}-job-scout"
+                sqs.send_message(
+                    QueueUrl=queue_url,
+                    MessageBody=json.dumps({"userId": user_id, "cvId": cv_id}),
+                )
+                print(f"Career goals already exist — triggered job scout for user {user_id}, cv {cv_id}")
+            except Exception as sqs_err:
+                print(f"Warning: could not trigger job scout: {sqs_err}")
+        else:
+            print(f"No career goals yet for user {user_id} — job scout will trigger when goals are saved")
 
         return {
             "statusCode": 200,
