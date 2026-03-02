@@ -33,42 +33,42 @@ const STATUS_COLS: {
     key: "matched",
     label: "Matched",
     emoji: "🎯",
-    colour: "bg-amber-50/80 border-amber-200/80 dark:bg-amber-950/20 dark:border-amber-800/30",
+    colour: "bg-amber-50/80 border-amber-200/80 dark:bg-amber-950/40 dark:border-amber-700/50",
     accent: "bg-amber-400 dark:bg-amber-500",
   },
   {
     key: "tailoring",
     label: "Tailoring",
     emoji: "✏️",
-    colour: "bg-violet-50/80 border-violet-200/80 dark:bg-violet-950/20 dark:border-violet-800/30",
+    colour: "bg-violet-50/80 border-violet-200/80 dark:bg-violet-950/40 dark:border-violet-700/50",
     accent: "bg-violet-400 dark:bg-violet-500",
   },
   {
     key: "review",
     label: "Review",
     emoji: "👁",
-    colour: "bg-sky-50/80 border-sky-200/80 dark:bg-sky-950/20 dark:border-sky-800/30",
+    colour: "bg-sky-50/80 border-sky-200/80 dark:bg-sky-950/40 dark:border-sky-700/50",
     accent: "bg-sky-400 dark:bg-sky-500",
   },
   {
     key: "submitted",
     label: "Submitted",
     emoji: "📤",
-    colour: "bg-slate-50/80 border-slate-200/80 dark:bg-slate-800/25 dark:border-slate-700/30",
+    colour: "bg-slate-50/80 border-slate-200/80 dark:bg-slate-800/50 dark:border-slate-600/50",
     accent: "bg-slate-400 dark:bg-slate-500",
   },
   {
     key: "interview",
     label: "Interview",
     emoji: "🗓",
-    colour: "bg-emerald-50/80 border-emerald-200/80 dark:bg-emerald-950/20 dark:border-emerald-800/30",
+    colour: "bg-emerald-50/80 border-emerald-200/80 dark:bg-emerald-950/40 dark:border-emerald-700/50",
     accent: "bg-emerald-400 dark:bg-emerald-500",
   },
   {
     key: "offer",
     label: "Offer",
     emoji: "🎉",
-    colour: "bg-green-50/80 border-green-200/80 dark:bg-green-950/20 dark:border-green-800/30",
+    colour: "bg-green-50/80 border-green-200/80 dark:bg-green-950/40 dark:border-green-700/50",
     accent: "bg-green-400 dark:bg-green-500",
   },
 ];
@@ -299,7 +299,7 @@ export default function DashboardPage() {
                 return (
                   <div key={col.key} className="flex-none w-56">
                     {/* Column */}
-                    <div className={`rounded-2xl border p-3 space-y-2 min-h-44 ${col.colour}`}>
+                    <div className={`rounded-2xl border p-3 space-y-3 min-h-44 ${col.colour}`}>
                       {/* Column header */}
                       <div className="flex items-center justify-between px-0.5 mb-3">
                         <div className="flex items-center gap-1.5">
@@ -316,7 +316,7 @@ export default function DashboardPage() {
                       {/* Cards */}
                       {colApps.map((app) => (
                         <Link key={app.applicationId} href={`/applications?id=${app.applicationId}`}>
-                          <div className="group relative rounded-xl bg-card border border-border/50 p-3 shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150 cursor-pointer overflow-hidden">
+                          <div className="group relative rounded-xl bg-card border border-border/50 dark:border-white/[0.10] p-3 shadow-sm dark:shadow-[0_2px_8px_rgba(0,0,0,0.5)] hover:shadow-md hover:-translate-y-px transition-all duration-150 cursor-pointer overflow-hidden">
 
                             {/* Left accent stripe */}
                             <div className={`absolute inset-y-0 left-0 w-[3px] ${col.accent}`} />
