@@ -41,7 +41,8 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
-        run: aws s3 sync frontend/out/ s3://${{ vars.FRONTEND_BUCKET }} --delete
+        # --exclude lambda-deploy/* protects Lambda zips stored in the same bucket
+        run: aws s3 sync frontend/out/ s3://${{ vars.FRONTEND_BUCKET }} --delete --exclude "lambda-deploy/*"
 
       - name: Upload routes without .html extension (clean URL routing)
         # Next.js static export creates dashboard.html, login.html, etc.
@@ -65,6 +66,10 @@ jobs:
   deploy-backend:
     runs-on: ubuntu-latest
     environment: production
+    # Must run after frontend so the S3 --delete sync doesn't wipe Lambda zips
+    # uploaded to the same bucket (race condition: sync deletes lambda-deploy/*
+    # if both jobs run in parallel and sync wins).
+    needs: [deploy-frontend]
     env:
       PREFIX: aiapply-dev
       BUILD_DIR: /tmp/lambda_build
