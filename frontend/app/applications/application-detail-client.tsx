@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { isAuthenticated } from "@/lib/auth";
-import { getApplications, approveApplication, getTailoredCV, deleteApplication } from "@/lib/api";
+import { getApplications, approveApplication, getTailoredCV, deleteApplication, tailorApplication } from "@/lib/api";
 
 interface Change {
   type: "added" | "modified" | "removed";
@@ -57,6 +57,8 @@ interface ApplicationDetail {
   atsScore?: string | number;
   coverLetter?: string;
   jobUrl?: string;
+  jobDescription?: string;
+  jobLocation?: string;
   createdAt?: string;
 }
 
@@ -68,6 +70,7 @@ const CHANGE_COLOURS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   pending:   "Pending",
+  matched:   "Matched — ready to tailor",
   matching:  "Matching",
   tailoring: "Tailoring CV…",
   review:    "Ready for review",
@@ -88,6 +91,7 @@ export default function ApplicationDetailClient() {
   const [cvLoading, setCvLoading] = useState(false);
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState("");
+  const [tailoring, setTailoring] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
@@ -136,6 +140,18 @@ export default function ApplicationDetailClient() {
       // non-fatal — CV tab just won't show
     } finally {
       setCvLoading(false);
+    }
+  }
+
+  async function handleTailor() {
+    if (!app || tailoring) return;
+    setTailoring(true);
+    try {
+      await tailorApplication(app.applicationId);
+      setApp((prev) => prev ? { ...prev, status: "tailoring" } : prev);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to queue tailoring. Please try again.");
+      setTailoring(false);
     }
   }
 
@@ -192,6 +208,7 @@ export default function ApplicationDetailClient() {
   const alignmentScore = Number(app.careerAlignmentScore) || 0;
   const atsScore       = Number(app.atsScore) || 0;
   const statusLabel    = STATUS_LABELS[app.status] ?? app.status;
+  const isMatched      = app.status === "matched";
   const canApprove     = app.status === "review";
   const isSubmitted    = app.status === "submitted";
 
@@ -233,11 +250,35 @@ export default function ApplicationDetailClient() {
                 </div>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="alignment">
+                <Tabs defaultValue={isMatched ? "job" : "alignment"}>
                   <TabsList className="mb-3">
+                    {isMatched && <TabsTrigger value="job">Job Description</TabsTrigger>}
                     <TabsTrigger value="alignment">Why You</TabsTrigger>
                     {app.coverLetter && <TabsTrigger value="cover">Cover Letter</TabsTrigger>}
                   </TabsList>
+
+                  {/* Job description — shown for matched jobs so user can decide whether to tailor */}
+                  {isMatched && (
+                    <TabsContent value="job" className="text-sm text-muted-foreground leading-relaxed">
+                      {app.jobLocation && (
+                        <p className="text-xs font-medium text-foreground mb-2">📍 {app.jobLocation}</p>
+                      )}
+                      <div className="whitespace-pre-wrap max-h-80 overflow-y-auto">
+                        {app.jobDescription || "Job description not available."}
+                      </div>
+                      {app.jobUrl && (
+                        <a
+                          href={app.jobUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 underline underline-offset-2 mt-3"
+                        >
+                          View original posting ↗
+                        </a>
+                      )}
+                    </TabsContent>
+                  )}
+
                   <TabsContent value="alignment" className="text-sm leading-relaxed">
                     <p className="text-muted-foreground">
                       {app.matchReason || "Match reasoning not yet available."}
@@ -257,13 +298,25 @@ export default function ApplicationDetailClient() {
 
             {/* Actions */}
             <div className="flex gap-3">
-              <Button
-                className="flex-1"
-                disabled={!canApprove || approving}
-                onClick={handleApprove}
-              >
-                {approving ? "Saving…" : isSubmitted ? "✓ CV Approved" : "✓ Approve CV"}
-              </Button>
+              {isMatched ? (
+                /* Matched: show Tailor CV as primary action */
+                <Button
+                  className="flex-1"
+                  disabled={tailoring}
+                  onClick={handleTailor}
+                >
+                  {tailoring ? "⏳ Queued — tailoring…" : "✨ Tailor CV for this Job"}
+                </Button>
+              ) : (
+                /* All other statuses: show Approve CV */
+                <Button
+                  className="flex-1"
+                  disabled={!canApprove || approving}
+                  onClick={handleApprove}
+                >
+                  {approving ? "Saving…" : isSubmitted ? "✓ CV Approved" : "✓ Approve CV"}
+                </Button>
+              )}
               <Button variant="ghost" onClick={() => router.push("/dashboard")}>← Back</Button>
               {!isSubmitted && (
                 <Button
@@ -302,7 +355,7 @@ export default function ApplicationDetailClient() {
               </div>
             )}
 
-            {!canApprove && !isSubmitted && (
+            {!canApprove && !isSubmitted && !isMatched && (
               <p className="text-xs text-muted-foreground text-center">
                 {app.status === "tailoring"
                   ? "✏️ AI is tailoring your CV — usually takes 1–2 minutes. Refresh to check."

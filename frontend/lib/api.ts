@@ -70,3 +70,10 @@ export async function deleteApplication(applicationId: string) {
     method: "DELETE",
   });
 }
+
+export async function tailorApplication(applicationId: string) {
+  return apiFetch("/api/applications/tailor", {
+    method: "POST",
+    body: JSON.stringify({ applicationId }),
+  });
+}

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 type AppStatus =
-  | "pending" | "matching" | "tailoring" | "review"
+  | "pending" | "matched" | "matching" | "tailoring" | "review"
   | "submitted" | "interview" | "offer" | "rejected";
 
 interface Application {
@@ -23,6 +23,7 @@ interface Application {
 }
 
 const STATUS_COLS: { key: AppStatus; label: string; colour: string }[] = [
+  { key: "matched",   label: "🎯 Matched",   colour: "bg-orange-50 border-orange-200" },
   { key: "matching",  label: "🔍 Matching",  colour: "bg-blue-50 border-blue-200" },
   { key: "tailoring", label: "✏️ Tailoring",  colour: "bg-purple-50 border-purple-200" },
   { key: "review",    label: "👁 Review",     colour: "bg-yellow-50 border-yellow-200" },

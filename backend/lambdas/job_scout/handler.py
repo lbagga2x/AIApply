@@ -226,27 +226,19 @@ def lambda_handler(event, context):
                     "applicationId": app_id,
                     "jobId": job["jobId"],
                     "cvId": cv_id,
-                    "status": "tailoring",
+                    "status": "matched",           # human checkpoint — user triggers tailoring manually
                     "companyName": job["company"],
                     "jobTitle": job["title"],
+                    "jobLocation": job.get("location", ""),
+                    "jobDescription": job.get("description", ""),  # stored so user can read before tailoring
                     "matchScore": str(job["matchScore"]),
                     "careerAlignmentScore": str(job["careerAlignmentScore"]),
                     "matchReason": job["matchReason"],
-                    "jobUrl": job.get("url", ""),   # embed URL so API doesn't need a join
+                    "jobUrl": job.get("url", ""),
                     "createdAt": datetime.now(timezone.utc).isoformat(),
                 })
-
-                # Queue CV tailoring
-                if CV_TAILOR_QUEUE_URL:
-                    sqs.send_message(
-                        QueueUrl=CV_TAILOR_QUEUE_URL,
-                        MessageBody=json.dumps({
-                            "userId": user_id,
-                            "cvId": cv_id,
-                            "applicationId": app_id,
-                            "jobId": job["jobId"],
-                        }),
-                    )
+                # CV tailoring is now triggered manually by the user via POST /api/applications/tailor
+                # (no automatic SQS send here — saves tokens on jobs the user doesn't want)
 
             print(f"Found {len(matched_jobs)} matches, queued for tailoring")
             return {"statusCode": 200, "body": f"Found {len(matched_jobs)} matches"}

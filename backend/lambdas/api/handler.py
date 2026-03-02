@@ -17,6 +17,7 @@ sqs = boto3.client("sqs")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 CV_BUCKET = os.environ.get("CV_BUCKET", "aiapply-dev-cv-storage")
 SQS_JOB_SCOUT_URL = os.environ.get("SQS_JOB_SCOUT_URL", "")
+SQS_CV_TAILOR_URL = os.environ.get("SQS_CV_TAILOR_URL", "")
 
 # Table references
 USERS_TABLE = f"aiapply-{ENVIRONMENT}-users"
@@ -184,6 +185,15 @@ def get_job_scout_queue_url() -> str:
     return f"https://sqs.{region}.amazonaws.com/{account_id}/aiapply-{ENVIRONMENT}-job-scout"
 
 
+def get_cv_tailor_queue_url() -> str:
+    """Get cv-tailor SQS queue URL from env var, or derive it via STS."""
+    if SQS_CV_TAILOR_URL:
+        return SQS_CV_TAILOR_URL
+    account_id = boto3.client("sts").get_caller_identity()["Account"]
+    region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    return f"https://sqs.{region}.amazonaws.com/{account_id}/aiapply-{ENVIRONMENT}-cv-tailor"
+
+
 def handle_save_career_goals(event: dict) -> dict:
     """POST /api/career-goals — Save user's career goals and trigger job scout."""
     user_id = get_user_id(event)
@@ -236,6 +246,45 @@ def handle_get_career_goals(event: dict) -> dict:
     item = result.get("Item", {})
 
     return response(200, {"careerGoals": item.get("careerGoals", {})})
+
+
+def handle_tailor_application(event: dict) -> dict:
+    """POST /api/applications/tailor — Queue a matched application for CV tailoring."""
+    user_id = get_user_id(event)
+    body = json.loads(event.get("body", "{}"))
+    application_id = body.get("applicationId")
+
+    if not application_id:
+        return response(400, {"error": "applicationId required"})
+
+    # Fetch the application to get cvId and jobId for the SQS message
+    table = dynamodb.Table(APPLICATIONS_TABLE)
+    item = table.get_item(
+        Key={"userId": user_id, "applicationId": application_id}
+    ).get("Item", {})
+
+    if not item:
+        return response(404, {"error": "Application not found"})
+
+    # Update status to tailoring
+    table.update_item(
+        Key={"userId": user_id, "applicationId": application_id},
+        UpdateExpression="SET #status = :s",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={":s": "tailoring"},
+    )
+
+    # Send to cv-tailor queue
+    sqs.send_message(
+        QueueUrl=get_cv_tailor_queue_url(),
+        MessageBody=json.dumps({
+            "userId": user_id,
+            "cvId": item["cvId"],
+            "applicationId": application_id,
+            "jobId": item["jobId"],
+        }),
+    )
+    return response(200, {"message": "CV tailoring queued"})
 
 
 def handle_delete_application(event: dict) -> dict:
@@ -316,6 +365,8 @@ def lambda_handler(event, context):
         return handle_get_applications(event)
     elif raw_path == "/api/applications" and method == "DELETE":
         return handle_delete_application(event)
+    elif raw_path == "/api/applications/tailor" and method == "POST":
+        return handle_tailor_application(event)
     elif raw_path == "/api/applications/approve" and method == "POST":
         return handle_approve_application(event)
     elif raw_path == "/api/applications/tailored-cv" and method == "GET":
