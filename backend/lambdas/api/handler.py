@@ -245,9 +245,19 @@ def handle_get_career_goals(event: dict) -> dict:
     result = table.get_item(Key={"userId": user_id})
     item = result.get("Item", {})
 
+    usage = {
+        "haikuInputTokens":  int(item.get("usageHaikuInputTokens",  0)),
+        "haikuOutputTokens": int(item.get("usageHaikuOutputTokens", 0)),
+        "haikuCalls":        int(item.get("usageHaikuCalls",        0)),
+        "sonnetInputTokens":  int(item.get("usageSonnetInputTokens",  0)),
+        "sonnetOutputTokens": int(item.get("usageSonnetOutputTokens", 0)),
+        "sonnetCalls":        int(item.get("usageSonnetCalls",        0)),
+    }
+
     return response(200, {
         "careerGoals": item.get("careerGoals", {}),
         "lastScannedAt": item.get("lastScannedAt"),
+        "usage": usage,
     })
 
 

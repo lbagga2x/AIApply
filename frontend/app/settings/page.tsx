@@ -14,6 +14,31 @@ import { Badge } from "@/components/ui/badge";
 
 const WORK_ARRANGEMENTS = ["Remote", "Hybrid", "On-site"];
 
+// Claude pricing ($/million tokens) — Haiku 4.5 & Sonnet 4.5
+const HAIKU_INPUT_PER_M   = 0.80;
+const HAIKU_OUTPUT_PER_M  = 4.00;
+const SONNET_INPUT_PER_M  = 3.00;
+const SONNET_OUTPUT_PER_M = 15.00;
+
+interface UsageStats {
+  haikuInputTokens:   number;
+  haikuOutputTokens:  number;
+  haikuCalls:         number;
+  sonnetInputTokens:  number;
+  sonnetOutputTokens: number;
+  sonnetCalls:        number;
+}
+
+function calcCost(inputTokens: number, outputTokens: number, inputPerM: number, outputPerM: number) {
+  return (inputTokens / 1_000_000) * inputPerM + (outputTokens / 1_000_000) * outputPerM;
+}
+
+function fmtUsd(usd: number) {
+  if (usd === 0) return "$0.00";
+  if (usd < 0.005) return "< $0.01";
+  return `$${usd.toFixed(2)}`;
+}
+
 function formatRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
   const mins = Math.floor(diff / 60000);
@@ -88,6 +113,7 @@ export default function SettingsPage() {
   const [scanning, setScanning] = useState(false);
   const [scanDone, setScanDone] = useState(false);
   const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageStats | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -100,6 +126,7 @@ export default function SettingsPage() {
       setLocations((g.locations ?? []).join(", "));
       setArrangement(g.workArrangement ?? ["Remote"]);
       setLastScannedAt(data.lastScannedAt ?? null);
+      if (data.usage) setUsage(data.usage);
     }).catch(() => {});
   }, [router]);
 
@@ -277,6 +304,70 @@ export default function SettingsPage() {
             <p className="text-xs text-muted-foreground">
               ~$0.07 per scan · Haiku model scores 30 jobs · Run daily for fresh results
             </p>
+          </CardContent>
+        </Card>
+
+        {/* ── Usage & Costs ── */}
+        <Card className="shadow-sm border-border/60">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Usage &amp; Costs</CardTitle>
+            <CardDescription>Claude API spend since account creation</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {usage ? (() => {
+              const haikuCost  = calcCost(usage.haikuInputTokens,  usage.haikuOutputTokens,  HAIKU_INPUT_PER_M,  HAIKU_OUTPUT_PER_M);
+              const sonnetCost = calcCost(usage.sonnetInputTokens, usage.sonnetOutputTokens, SONNET_INPUT_PER_M, SONNET_OUTPUT_PER_M);
+              const totalCost  = haikuCost + sonnetCost;
+              const rows = [
+                {
+                  label: "Job Scanning",
+                  model: "Haiku 4.5",
+                  calls: usage.haikuCalls,
+                  callLabel: "scan",
+                  cost: haikuCost,
+                  colour: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                },
+                {
+                  label: "CV Tailoring",
+                  model: "Sonnet 4.5",
+                  calls: usage.sonnetCalls,
+                  callLabel: "CV",
+                  cost: sonnetCost,
+                  colour: "bg-violet-500/10 text-violet-700 dark:text-violet-400",
+                },
+              ];
+              return (
+                <div className="space-y-3">
+                  {rows.map((r) => (
+                    <div key={r.label} className="flex items-center justify-between gap-4 rounded-xl border border-border/60 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium">{r.label}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {r.calls} {r.callLabel}{r.calls !== 1 ? "s" : ""} · {r.model}
+                        </p>
+                      </div>
+                      <span className={`text-[13px] font-semibold tabular-nums px-2.5 py-1 rounded-lg ${r.colour}`}>
+                        {fmtUsd(r.cost)}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Total */}
+                  <div className="flex items-center justify-between gap-4 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3">
+                    <p className="text-[13px] font-semibold">Total</p>
+                    <span className="text-[15px] font-bold tabular-nums text-primary">
+                      {fmtUsd(totalCost)}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground pt-1">
+                    Haiku: $0.80/$4.00 per M tokens · Sonnet: $3.00/$15.00 per M tokens (input/output)
+                  </p>
+                </div>
+              );
+            })() : (
+              <p className="text-[13px] text-muted-foreground">No usage recorded yet.</p>
+            )}
           </CardContent>
         </Card>
 

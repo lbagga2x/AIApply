@@ -34,6 +34,30 @@ APPLICATIONS_TABLE = f"aiapply-{ENVIRONMENT}-applications"
 USERS_TABLE = f"aiapply-{ENVIRONMENT}-users"
 CV_TAILOR_QUEUE_URL = os.environ.get("CV_TAILOR_QUEUE_URL", "")
 
+# Claude Haiku 4.5 pricing ($/million tokens)
+HAIKU_INPUT_COST_PER_M  = Decimal("0.80")
+HAIKU_OUTPUT_COST_PER_M = Decimal("4.00")
+
+
+def track_haiku_usage(user_id: str, usage) -> None:
+    """Atomically record Haiku token usage on the user record (non-fatal)."""
+    try:
+        dynamodb.Table(USERS_TABLE).update_item(
+            Key={"userId": user_id},
+            UpdateExpression=(
+                "ADD usageHaikuInputTokens :it, "
+                "usageHaikuOutputTokens :ot, "
+                "usageHaikuCalls :one"
+            ),
+            ExpressionAttributeValues={
+                ":it":  Decimal(str(usage.input_tokens)),
+                ":ot":  Decimal(str(usage.output_tokens)),
+                ":one": Decimal("1"),
+            },
+        )
+    except Exception as e:
+        print(f"Usage tracking failed (non-fatal): {e}")
+
 _anthropic_client = None
 
 
@@ -87,7 +111,7 @@ def scrape_jobs(search_terms: list[str], location: str, num_results: int = 20) -
 def score_jobs_with_claude(jobs: list[dict], career_goals: dict, cv_summary: str) -> list[dict]:
     """Use Claude to score each job against career goals and CV."""
     if not jobs:
-        return []
+        return [], None
 
     client = get_client()
 
@@ -162,7 +186,7 @@ Only return jobs with a realistic chance of success.""",
 
     # Sort by combined score
     scored_jobs.sort(key=lambda j: j["matchScore"] + j["careerAlignmentScore"], reverse=True)
-    return scored_jobs[:10]  # top 10 only
+    return scored_jobs[:10], message.usage  # top 10 + usage stats
 
 
 def lambda_handler(event, context):
@@ -209,7 +233,9 @@ def lambda_handler(event, context):
                 return {"statusCode": 200, "body": "No jobs found"}
 
             # Score jobs
-            matched_jobs = score_jobs_with_claude(raw_jobs, career_goals, cv_summary)
+            matched_jobs, haiku_usage = score_jobs_with_claude(raw_jobs, career_goals, cv_summary)
+            if haiku_usage:
+                track_haiku_usage(user_id, haiku_usage)
 
             # Save matched jobs to DynamoDB and queue CV tailoring
             jobs_table = dynamodb.Table(JOBS_TABLE)

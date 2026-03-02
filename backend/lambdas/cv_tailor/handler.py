@@ -8,6 +8,7 @@ import json
 import os
 import boto3
 import anthropic
+from decimal import Decimal
 from datetime import datetime, timezone
 
 dynamodb = boto3.resource("dynamodb")
@@ -21,6 +22,31 @@ CV_BUCKET = os.environ.get("CV_BUCKET", "")
 CVS_TABLE = f"aiapply-{ENVIRONMENT}-cvs"
 JOBS_TABLE = f"aiapply-{ENVIRONMENT}-job-listings"
 APPLICATIONS_TABLE = f"aiapply-{ENVIRONMENT}-applications"
+USERS_TABLE = f"aiapply-{ENVIRONMENT}-users"
+
+# Claude Sonnet 4.5 pricing ($/million tokens)
+SONNET_INPUT_COST_PER_M  = Decimal("3.00")
+SONNET_OUTPUT_COST_PER_M = Decimal("15.00")
+
+
+def track_sonnet_usage(user_id: str, usage) -> None:
+    """Atomically record Sonnet token usage on the user record (non-fatal)."""
+    try:
+        dynamodb.Table(USERS_TABLE).update_item(
+            Key={"userId": user_id},
+            UpdateExpression=(
+                "ADD usageSonnetInputTokens :it, "
+                "usageSonnetOutputTokens :ot, "
+                "usageSonnetCalls :one"
+            ),
+            ExpressionAttributeValues={
+                ":it":  Decimal(str(usage.input_tokens)),
+                ":ot":  Decimal(str(usage.output_tokens)),
+                ":one": Decimal("1"),
+            },
+        )
+    except Exception as e:
+        print(f"Usage tracking failed (non-fatal): {e}")
 
 _anthropic_client = None
 
@@ -96,7 +122,7 @@ Return this exact JSON structure:
     elif "```" in response_text:
         response_text = response_text.split("```")[1].split("```")[0]
 
-    return json.loads(response_text.strip())
+    return json.loads(response_text.strip()), message.usage
 
 
 def lambda_handler(event, context):
@@ -125,7 +151,8 @@ def lambda_handler(event, context):
                 continue
 
             # Tailor the CV
-            result = tailor_cv(cv_data, job)
+            result, sonnet_usage = tailor_cv(cv_data, job)
+            track_sonnet_usage(user_id, sonnet_usage)
             tailored_cv = result.get("tailoredCV", {})
             changes = result.get("changes", [])
             ats_score = result.get("atsScore", 0)
