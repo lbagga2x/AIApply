@@ -31,6 +31,7 @@ interface Application {
   matchScore?: number;
   careerAlignmentScore?: number;
   createdAt?: string;
+  source?: string;
 }
 
 const MANUAL_STATUS_OPTIONS: { key: AppStatus; label: string }[] = [
@@ -519,6 +520,10 @@ export default function DashboardPage() {
                               </p>
                               <p className="text-[11px] text-muted-foreground truncate mt-0.5">
                                 {app.jobTitle || "—"}
+                              </p>
+
+                              <p className="text-[10px] text-muted-foreground/80 mt-1">
+                                {app.source === "manual" ? "Added manually" : "Found by AI"}
                               </p>
 
                               {app.matchScore != null && Number(app.matchScore) > 0 && (
