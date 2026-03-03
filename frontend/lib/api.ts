@@ -81,3 +81,7 @@ export async function tailorApplication(applicationId: string) {
 export async function scanJobs() {
   return apiFetch("/api/jobs/scan", { method: "POST" });
 }
+
+export async function deleteAccount() {
+  return apiFetch("/api/account", { method: "DELETE" });
+}

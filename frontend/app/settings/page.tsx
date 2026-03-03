@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Sun, Moon, Monitor, Check, ChevronLeft } from "lucide-react";
-import { isAuthenticated } from "@/lib/auth";
-import { getCareerGoals, saveCareerGoals, scanJobs } from "@/lib/api";
+import { isAuthenticated, signOut } from "@/lib/auth";
+import { getCareerGoals, saveCareerGoals, scanJobs, deleteAccount } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,6 +114,9 @@ export default function SettingsPage() {
   const [scanDone, setScanDone] = useState(false);
   const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageStats | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -141,6 +144,19 @@ export default function SettingsPage() {
       alert(err instanceof Error ? err.message : "Scan failed. Please try again.");
     } finally {
       setScanning(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmText !== "DELETE") return;
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      await signOut();
+      router.push("/");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete account. Please try again.");
+      setDeleting(false);
     }
   }
 
@@ -424,6 +440,66 @@ export default function SettingsPage() {
                 </div>
               </label>
             ))}
+          </CardContent>
+        </Card>
+
+        {/* ── Danger Zone ── */}
+        <Card className="shadow-sm border-destructive/30">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
+            <CardDescription>Permanently delete your account and all associated data</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-[13px] text-muted-foreground">
+              This will delete your profile, all CVs, all applications, and all tailored CV files from storage.
+              <span className="font-medium text-foreground"> This cannot be undone.</span>
+            </p>
+
+            {!showDeleteConfirm ? (
+              <Button
+                variant="outline"
+                className="border-destructive/40 text-destructive hover:bg-destructive/5 hover:border-destructive h-9 text-[13px]"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Delete My Account
+              </Button>
+            ) : (
+              <div className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+                <p className="text-[13px] font-medium text-destructive">
+                  Type <span className="font-mono font-bold">DELETE</span> to confirm
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="DELETE"
+                    className="border-destructive/40 font-mono text-[13px] h-9 w-36"
+                    disabled={deleting}
+                    autoFocus
+                  />
+                  <Button
+                    onClick={handleDeleteAccount}
+                    disabled={deleteConfirmText !== "DELETE" || deleting}
+                    className="h-9 text-[13px] bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  >
+                    {deleting ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                        Deleting…
+                      </span>
+                    ) : "Confirm Delete"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); }}
+                    disabled={deleting}
+                    className="h-9 text-[13px] border-border/60"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

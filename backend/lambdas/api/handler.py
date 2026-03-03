@@ -375,6 +375,64 @@ def handle_approve_application(event: dict) -> dict:
     return response(200, {"message": "Application approved and marked as submitted"})
 
 
+def handle_delete_account(event: dict) -> dict:
+    """DELETE /api/account — Permanently erase every record and file for this user."""
+    user_id = get_user_id(event)
+    if user_id == "anonymous":
+        return response(401, {"error": "Unauthorized"})
+
+    errors = []
+
+    # 1. Delete all application records
+    try:
+        apps_table = dynamodb.Table(APPLICATIONS_TABLE)
+        result = apps_table.query(
+            KeyConditionExpression="userId = :uid",
+            ExpressionAttributeValues={":uid": user_id},
+            ProjectionExpression="applicationId",
+        )
+        for item in result.get("Items", []):
+            apps_table.delete_item(Key={"userId": user_id, "applicationId": item["applicationId"]})
+    except Exception as e:
+        errors.append(f"applications: {e}")
+
+    # 2. Delete all CV records
+    try:
+        cvs_table = dynamodb.Table(CVS_TABLE)
+        result = cvs_table.query(
+            KeyConditionExpression="userId = :uid",
+            ExpressionAttributeValues={":uid": user_id},
+            ProjectionExpression="cvId",
+        )
+        for item in result.get("Items", []):
+            cvs_table.delete_item(Key={"userId": user_id, "cvId": item["cvId"]})
+    except Exception as e:
+        errors.append(f"cvs: {e}")
+
+    # 3. Delete all S3 objects under uploads/{userId}/ and tailored/{userId}/
+    for prefix in [f"uploads/{user_id}/", f"tailored/{user_id}/"]:
+        try:
+            paginator = s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=CV_BUCKET, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    s3.delete_object(Bucket=CV_BUCKET, Key=obj["Key"])
+        except Exception as e:
+            errors.append(f"s3 {prefix}: {e}")
+
+    # 4. Delete user record (last — keeps auth working until everything else is gone)
+    try:
+        dynamodb.Table(USERS_TABLE).delete_item(Key={"userId": user_id})
+    except Exception as e:
+        errors.append(f"user record: {e}")
+
+    if errors:
+        print(f"Delete account partial errors for {user_id}: {errors}")
+        return response(207, {"message": "Account deleted with some errors", "errors": errors})
+
+    print(f"Account fully deleted: {user_id}")
+    return response(200, {"message": "Account deleted"})
+
+
 def handle_get_tailored_cv(event: dict) -> dict:
     """GET /api/applications/tailored-cv?applicationId=xxx — Fetch the tailored CV JSON from S3."""
     user_id = get_user_id(event)
@@ -416,6 +474,8 @@ def lambda_handler(event, context):
         return handle_get_applications(event)
     elif raw_path == "/api/applications" and method == "DELETE":
         return handle_delete_application(event)
+    elif raw_path == "/api/account" and method == "DELETE":
+        return handle_delete_account(event)
     elif raw_path == "/api/applications/tailor" and method == "POST":
         return handle_tailor_application(event)
     elif raw_path == "/api/applications/approve" and method == "POST":
